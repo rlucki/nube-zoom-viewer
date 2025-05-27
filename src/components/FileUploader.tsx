@@ -118,16 +118,12 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 
   const parseIFC = useCallback(async (buffer: ArrayBuffer): Promise<Point[]> => {
     try {
-      // Import IFC.js dynamically
-      const { IFCLoader } = await import('three/examples/jsm/loaders/IFCLoader.js');
-      
-      // Create a simple point cloud from IFC geometry
-      // This is a basic implementation - you might want to improve it
+      // For now, create a sample point cloud from IFC file
+      // In a production environment, you would use a proper IFC parser
       const points: Point[] = [];
       
-      // For now, create a sample point cloud based on IFC file size
-      // In a real implementation, you'd parse the IFC geometry properly
-      const sampleSize = Math.min(50000, buffer.byteLength / 100);
+      // Generate points based on file size to simulate IFC content
+      const sampleSize = Math.min(50000, Math.floor(buffer.byteLength / 100));
       
       for (let i = 0; i < sampleSize; i++) {
         // Generate points in a building-like structure
