@@ -1,10 +1,5 @@
-import React, {
-  useState,
-  useRef,
-  useMemo,
-  useCallback,
-  useEffect,
-} from 'react';
+
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import * as THREE from 'three';
@@ -14,9 +9,6 @@ import { PointCloud } from './PointCloud';
 import { IFCModel } from './IFCModel';
 import { useToast } from '@/hooks/use-toast';
 
-/* -------------------------------------------------------------------------- */
-/*  Tipos                                                                    */
-/* -------------------------------------------------------------------------- */
 export interface Point {
   x: number;
   y: number;
@@ -43,146 +35,260 @@ export interface LoadedFile {
   type: 'pointcloud' | 'ifc';
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Visor                                                                    */
-/* -------------------------------------------------------------------------- */
+export type ViewerData = Point[] | IFCGeometry;
+
 export const PointCloudViewer = () => {
-  /* ---------------------------- estado general ---------------------------- */
   const [loadedFiles, setLoadedFiles] = useState<LoadedFile[]>([]);
   const [density, setDensity] = useState(1);
   const [pointSize, setPointSize] = useState(2);
-  const [colorMode, setColorMode] = useState<'rgb' | 'intensity' | 'height'>(
-    'rgb',
-  );
+  const [colorMode, setColorMode] = useState<'rgb' | 'intensity' | 'height'>('rgb');
   const [transparency, setTransparency] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-
-  /* ------------------------------- refs ui -------------------------------- */
   const controlsRef = useRef<any>(null);
   const { toast } = useToast();
 
-  /* ----------------------------- filtros ---------------------------------- */
-  const pointClouds = loadedFiles.filter((f) => f.type === 'pointcloud');
-  const ifcModels = loadedFiles.filter((f) => f.type === 'ifc');
-
-  /* ---------------------- vector OK para toda la escena ------------------- */
-  const [worldOffset, setWorldOffset] = useState(() => new THREE.Vector3(0, 0, 0));
-
-  useEffect(() => {
-    if (loadedFiles.length === 0) return;
-
-    /* 1. Calculamos un bounding-box global */
-    const box = new THREE.Box3();
-    pointClouds.forEach((file) => {
-      (file.data as Point[]).forEach((p) => {
-        box.expandByPoint(new THREE.Vector3(p.x, p.y, p.z));
-      });
-    });
-    ifcModels.forEach((file) => {
-      const g = file.data as IFCGeometry;
-      if (g.bounds) {
-        box.expandByPoint(g.bounds.min);
-        box.expandByPoint(g.bounds.max);
-      }
-    });
-
-    if (!box.isEmpty()) {
-      /* 2. Centramos todo restando el centro al cargar/mostrar */
-      const center = box.getCenter(new THREE.Vector3());
-      setWorldOffset(center);
-    }
-  }, [loadedFiles]); // recalcula sólo cuando entra o sale un archivo
-
-  /* --------------------------- nubes de puntos ---------------------------- */
-  const allPoints = useMemo(
-    () => pointClouds.flatMap((f) => f.data as Point[]),
-    [pointClouds],
-  );
+  // Get all point clouds
+  const pointClouds = loadedFiles.filter(file => file.type === 'pointcloud');
+  const ifcModels = loadedFiles.filter(file => file.type === 'ifc');
+  
+  // Combine all points from all point clouds
+  const allPoints = useMemo(() => {
+    return pointClouds.flatMap(file => file.data as Point[]);
+  }, [pointClouds]);
 
   const sampledPoints = useMemo(() => {
     if (density >= 1) return allPoints;
     const step = Math.ceil(1 / density);
-    return allPoints.filter((_, i) => i % step === 0);
+    return allPoints.filter((_, index) => index % step === 0);
   }, [allPoints, density]);
 
-  /* ---------------------------- auto-fit cámara --------------------------- */
+  // Auto-fit camera when new data is loaded
   useEffect(() => {
-    if (!controlsRef.current || loadedFiles.length === 0) return;
-    const controls = controlsRef.current;
-    const box = new THREE.Box3();
-
-    sampledPoints.forEach((p) => {
-      box.expandByPoint(
-        new THREE.Vector3(p.x, p.y, p.z).sub(worldOffset), // ojo al offset
-      );
-    });
-    ifcModels.forEach((file) => {
-      const g = file.data as IFCGeometry;
-      box.expandByPoint(g.bounds.min.clone().sub(worldOffset));
-      box.expandByPoint(g.bounds.max.clone().sub(worldOffset));
-    });
-
-    if (!box.isEmpty()) {
-      const center = box.getCenter(new THREE.Vector3());
-      const radius = box.getSize(new THREE.Vector3()).length() * 0.5;
-      const distance = radius * 2.5;
-
-      controls.target.copy(center);
-      controls.object.position.set(
-        center.x + distance,
-        center.y + distance,
-        center.z + distance,
-      );
-      controls.update();
-    }
-  }, [worldOffset, sampledPoints, ifcModels]);
-
-  /* ----------------------- carga de nuevos archivos ----------------------- */
-  const handleFileLoad = useCallback(
-    (loadedData: Point[] | IFCGeometry, name: string) => {
-      const newFile: LoadedFile = {
-        id: `${Date.now()}-${Math.random()}`,
-        name,
-        data: loadedData,
-        type: Array.isArray(loadedData) ? 'pointcloud' : 'ifc',
-      };
-      setLoadedFiles((prev) => [...prev, newFile]);
-
-      toast({
-        title: Array.isArray(loadedData)
-          ? 'Nube de puntos cargada'
-          : 'Modelo IFC cargado',
-        description: Array.isArray(loadedData)
-          ? `${loadedData.length.toLocaleString()} puntos`
-          : name,
+    if (controlsRef.current && loadedFiles.length > 0) {
+      const controls = controlsRef.current;
+      
+      // Calculate bounds of all data
+      const box = new THREE.Box3();
+      
+      // Add point cloud bounds
+      if (allPoints.length > 0) {
+        allPoints.forEach(point => {
+          box.expandByPoint(new THREE.Vector3(point.x, point.y, point.z));
+        });
+      }
+      
+      // Add IFC model bounds
+      ifcModels.forEach(file => {
+        const geometry = file.data as IFCGeometry;
+        if (geometry.bounds) {
+          box.expandByPoint(geometry.bounds.min);
+          box.expandByPoint(geometry.bounds.max);
+        }
       });
-    },
-    [toast],
-  );
+      
+      if (!box.isEmpty()) {
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const distance = maxDim * 2;
+        
+        controls.target.copy(center);
+        controls.object.position.set(
+          center.x + distance,
+          center.y + distance,
+          center.z + distance
+        );
+        controls.update();
+      }
+    }
+  }, [loadedFiles, allPoints, ifcModels]);
 
-  /* ---------------------------- reset visor ------------------------------ */
+  const handleFileLoad = useCallback((loadedData: ViewerData, name: string) => {
+    const isPointCloud = Array.isArray(loadedData);
+    const newFile: LoadedFile = {
+      id: Date.now().toString() + Math.random().toString(),
+      name,
+      data: loadedData,
+      type: isPointCloud ? 'pointcloud' : 'ifc'
+    };
+
+    setLoadedFiles(prev => [...prev, newFile]);
+    
+    if (isPointCloud) {
+      toast({
+        title: "Nube de puntos cargada",
+        description: `${(loadedData as Point[]).length.toLocaleString()} puntos cargados desde ${name}`,
+      });
+    } else {
+      toast({
+        title: "Modelo IFC cargado",
+        description: `Geometría 3D cargada desde ${name}`,
+      });
+    }
+  }, [toast]);
+
   const handleReset = useCallback(() => {
     setLoadedFiles([]);
     setDensity(1);
     setPointSize(2);
     setColorMode('rgb');
     setTransparency(1);
-    setWorldOffset(new THREE.Vector3());
-    controlsRef.current?.reset();
+    
+    // Reset camera position
+    if (controlsRef.current) {
+      controlsRef.current.reset();
+    }
   }, []);
 
-  /* -------------------- utilidades ui - contadores ----------------------- */
+  const toggleControlsVisibility = useCallback(() => {
+    setControlsVisible(prev => !prev);
+  }, []);
+
   const totalCount = allPoints.length;
   const visibleCount = sampledPoints.length;
   const hasData = loadedFiles.length > 0;
 
-  /* ----------------------------------------------------------------------- */
-  /*                             RENDER                                      */
-  /* ----------------------------------------------------------------------- */
   return (
     <div className="w-full h-screen bg-gray-900 relative">
-      {/* … ➊ HEADER, controles y overlays exactamente igual que antes … */}
+      {/* Header */}
+      <div className="absolute top-0 left-0 right-0 z-10 bg-black/80 backdrop-blur-sm border-b border-gray-700">
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-bold text-white">Visor de Nubes de Puntos</h1>
+            {loadedFiles.length > 0 && (
+              <div className="text-sm text-gray-300">
+                {loadedFiles.map(file => (
+                  <span key={file.id} className="mr-4">
+                    {file.name} {file.type === 'pointcloud' ? 
+                      `(${(file.data as Point[]).length.toLocaleString()} puntos)` : 
+                      '(Modelo 3D)'
+                    }
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <FileUploader 
+              onFileLoad={handleFileLoad} 
+              setIsLoading={setIsLoading}
+              isLoading={isLoading}
+            />
+            {hasData && (
+              <button
+                onClick={handleReset}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Limpiar Todo
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
-      {/* 3D CANVAS */}
+      {/* Controls Panel */}
+      {hasData && (
+        <ViewerControls
+          density={density}
+          setDensity={setDensity}
+          pointSize={pointSize}
+          setPointSize={setPointSize}
+          colorMode={colorMode}
+          setColorMode={setColorMode}
+          transparency={transparency}
+          setTransparency={setTransparency}
+          totalCount={totalCount}
+          visibleCount={visibleCount}
+          isVisible={controlsVisible}
+          onToggleVisibility={toggleControlsVisibility}
+          isPointCloud={pointClouds.length > 0}
+          hasIFCModel={ifcModels.length > 0}
+        />
+      )}
+
+      {/* Loading overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 z-20 bg-black/50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 flex items-center gap-3">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span>Cargando archivo...</span>
+          </div>
+        </div>
+      )}
+
+      {/* 3D Canvas */}
       <Canvas
+        camera={{ 
+          position: [10, 10, 10], 
+          fov: 60,
+          near: 0.1,
+          far: 10000 // Increased far distance
+        }}
+        className="absolute inset-0"
+        gl={{ antialias: true, alpha: true }}
+      >
+        <color attach="background" args={['#0f172a']} />
+        
+        {/* Lighting */}
+        <ambientLight intensity={0.6} />
+        <directionalLight position={[10, 10, 5]} intensity={0.8} />
+        <pointLight position={[-10, -10, -5]} intensity={0.3} />
+
+        {/* Render Point Clouds */}
+        {sampledPoints.length > 0 && (
+          <PointCloud 
+            points={sampledPoints} 
+            pointSize={pointSize}
+            colorMode={colorMode}
+          />
+        )}
+
+        {/* Render IFC Models */}
+        {ifcModels.map(file => (
+          <IFCModel 
+            key={file.id}
+            geometry={file.data as IFCGeometry}
+            transparency={transparency}
+          />
+        ))}
+
+        {/* Controls */}
+        <OrbitControls
+          ref={controlsRef}
+          enableDamping
+          dampingFactor={0.05}
+          rotateSpeed={0.5}
+          zoomSpeed={1}
+          panSpeed={0.8}
+          maxDistance={1000} // Increased max distance
+          minDistance={0.1} // Decreased min distance
+        />
+
+        {/* Performance Stats */}
+        <Stats />
+
+        {/* Grid helper when no data loaded */}
+        {!hasData && (
+          <>
+            <gridHelper args={[20, 20, '#333333', '#222222']} />
+            <axesHelper args={[5]} />
+          </>
+        )}
+      </Canvas>
+
+      {/* Welcome message */}
+      {!hasData && !isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="text-center text-white/80 max-w-md">
+            <div className="text-6xl mb-4">☁️</div>
+            <h2 className="text-2xl font-semibold mb-2">Bienvenido al Visor de Nubes de Puntos</h2>
+            <p className="text-gray-300">
+              Carga archivos LAS, LAZ, PLY o IFC para comenzar a visualizar en 3D. Puedes cargar múltiples archivos.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
