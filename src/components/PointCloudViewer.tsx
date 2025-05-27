@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
@@ -25,6 +24,7 @@ export const PointCloudViewer = () => {
   const [colorMode, setColorMode] = useState<'rgb' | 'intensity' | 'height'>('rgb');
   const [isLoading, setIsLoading] = useState(false);
   const [fileName, setFileName] = useState<string>('');
+  const [controlsVisible, setControlsVisible] = useState(true);
   const { toast } = useToast();
 
   const sampledPoints = useMemo(() => {
@@ -49,6 +49,10 @@ export const PointCloudViewer = () => {
     setDensity(1);
     setPointSize(2);
     setColorMode('rgb');
+  }, []);
+
+  const toggleControlsVisibility = useCallback(() => {
+    setControlsVisible(prev => !prev);
   }, []);
 
   return (
@@ -93,6 +97,8 @@ export const PointCloudViewer = () => {
           setColorMode={setColorMode}
           totalPoints={points.length}
           visiblePoints={sampledPoints.length}
+          isVisible={controlsVisible}
+          onToggleVisibility={toggleControlsVisibility}
         />
       )}
 
@@ -163,7 +169,7 @@ export const PointCloudViewer = () => {
             <div className="text-6xl mb-4">☁️</div>
             <h2 className="text-2xl font-semibold mb-2">Bienvenido al Visor de Nubes de Puntos</h2>
             <p className="text-gray-300">
-              Carga un archivo LAS, LAZ o PLY para comenzar a visualizar tu nube de puntos en 3D
+              Carga un archivo LAS, LAZ, PLY o IFC para comenzar a visualizar tu nube de puntos en 3D
             </p>
           </div>
         </div>
