@@ -28,38 +28,55 @@ export interface IFCGeometry {
   };
 }
 
+export interface LoadedFile {
+  id: string;
+  name: string;
+  data: Point[] | IFCGeometry;
+  type: 'pointcloud' | 'ifc';
+}
+
 export type ViewerData = Point[] | IFCGeometry;
 
 export const PointCloudViewer = () => {
-  const [data, setData] = useState<ViewerData>([]);
+  const [loadedFiles, setLoadedFiles] = useState<LoadedFile[]>([]);
   const [density, setDensity] = useState(1);
   const [pointSize, setPointSize] = useState(2);
   const [colorMode, setColorMode] = useState<'rgb' | 'intensity' | 'height'>('rgb');
   const [transparency, setTransparency] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
-  const [fileName, setFileName] = useState<string>('');
   const [controlsVisible, setControlsVisible] = useState(true);
   const { toast } = useToast();
 
-  const isPointCloud = Array.isArray(data);
-  const points = isPointCloud ? data as Point[] : [];
+  // Get all point clouds
+  const pointClouds = loadedFiles.filter(file => file.type === 'pointcloud');
+  const ifcModels = loadedFiles.filter(file => file.type === 'ifc');
+  
+  // Combine all points from all point clouds
+  const allPoints = useMemo(() => {
+    return pointClouds.flatMap(file => file.data as Point[]);
+  }, [pointClouds]);
 
   const sampledPoints = useMemo(() => {
-    if (!isPointCloud || density >= 1) return points;
+    if (density >= 1) return allPoints;
     const step = Math.ceil(1 / density);
-    return points.filter((_, index) => index % step === 0);
-  }, [points, density, isPointCloud]);
+    return allPoints.filter((_, index) => index % step === 0);
+  }, [allPoints, density]);
 
   const handleFileLoad = useCallback((loadedData: ViewerData, name: string) => {
-    setData(loadedData);
-    setFileName(name);
-    setDensity(1);
-    setTransparency(1);
+    const isPointCloud = Array.isArray(loadedData);
+    const newFile: LoadedFile = {
+      id: Date.now().toString() + Math.random().toString(),
+      name,
+      data: loadedData,
+      type: isPointCloud ? 'pointcloud' : 'ifc'
+    };
+
+    setLoadedFiles(prev => [...prev, newFile]);
     
-    if (Array.isArray(loadedData)) {
+    if (isPointCloud) {
       toast({
         title: "Nube de puntos cargada",
-        description: `${loadedData.length.toLocaleString()} puntos cargados desde ${name}`,
+        description: `${(loadedData as Point[]).length.toLocaleString()} puntos cargados desde ${name}`,
       });
     } else {
       toast({
@@ -70,8 +87,7 @@ export const PointCloudViewer = () => {
   }, [toast]);
 
   const handleReset = useCallback(() => {
-    setData([]);
-    setFileName('');
+    setLoadedFiles([]);
     setDensity(1);
     setPointSize(2);
     setColorMode('rgb');
@@ -82,8 +98,9 @@ export const PointCloudViewer = () => {
     setControlsVisible(prev => !prev);
   }, []);
 
-  const totalCount = isPointCloud ? points.length : 1;
-  const visibleCount = isPointCloud ? sampledPoints.length : 1;
+  const totalCount = allPoints.length;
+  const visibleCount = sampledPoints.length;
+  const hasData = loadedFiles.length > 0;
 
   return (
     <div className="w-full h-screen bg-gray-900 relative">
@@ -92,10 +109,17 @@ export const PointCloudViewer = () => {
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold text-white">Visor de Nubes de Puntos</h1>
-            {fileName && (
-              <span className="text-sm text-gray-300">
-                {fileName} {isPointCloud ? `(${points.length.toLocaleString()} puntos)` : '(Modelo 3D)'}
-              </span>
+            {loadedFiles.length > 0 && (
+              <div className="text-sm text-gray-300">
+                {loadedFiles.map(file => (
+                  <span key={file.id} className="mr-4">
+                    {file.name} {file.type === 'pointcloud' ? 
+                      `(${(file.data as Point[]).length.toLocaleString()} puntos)` : 
+                      '(Modelo 3D)'
+                    }
+                  </span>
+                ))}
+              </div>
             )}
           </div>
           <div className="flex items-center gap-4">
@@ -104,12 +128,12 @@ export const PointCloudViewer = () => {
               setIsLoading={setIsLoading}
               isLoading={isLoading}
             />
-            {(points.length > 0 || !isPointCloud) && (
+            {hasData && (
               <button
                 onClick={handleReset}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
-                Limpiar
+                Limpiar Todo
               </button>
             )}
           </div>
@@ -117,7 +141,7 @@ export const PointCloudViewer = () => {
       </div>
 
       {/* Controls Panel */}
-      {(points.length > 0 || !isPointCloud) && (
+      {hasData && (
         <ViewerControls
           density={density}
           setDensity={setDensity}
@@ -131,7 +155,8 @@ export const PointCloudViewer = () => {
           visibleCount={visibleCount}
           isVisible={controlsVisible}
           onToggleVisibility={toggleControlsVisibility}
-          isPointCloud={isPointCloud}
+          isPointCloud={pointClouds.length > 0}
+          hasIFCModel={ifcModels.length > 0}
         />
       )}
 
@@ -163,8 +188,8 @@ export const PointCloudViewer = () => {
         <directionalLight position={[10, 10, 5]} intensity={0.8} />
         <pointLight position={[-10, -10, -5]} intensity={0.3} />
 
-        {/* Render Point Cloud or IFC Model */}
-        {isPointCloud && sampledPoints.length > 0 && (
+        {/* Render Point Clouds */}
+        {sampledPoints.length > 0 && (
           <PointCloud 
             points={sampledPoints} 
             pointSize={pointSize}
@@ -172,12 +197,14 @@ export const PointCloudViewer = () => {
           />
         )}
 
-        {!isPointCloud && (
+        {/* Render IFC Models */}
+        {ifcModels.map(file => (
           <IFCModel 
-            geometry={data as IFCGeometry}
+            key={file.id}
+            geometry={file.data as IFCGeometry}
             transparency={transparency}
           />
-        )}
+        ))}
 
         {/* Controls */}
         <OrbitControls
@@ -194,7 +221,7 @@ export const PointCloudViewer = () => {
         <Stats />
 
         {/* Grid helper when no data loaded */}
-        {points.length === 0 && isPointCloud && (
+        {!hasData && (
           <>
             <gridHelper args={[20, 20, '#333333', '#222222']} />
             <axesHelper args={[5]} />
@@ -203,13 +230,13 @@ export const PointCloudViewer = () => {
       </Canvas>
 
       {/* Welcome message */}
-      {points.length === 0 && isPointCloud && !isLoading && (
+      {!hasData && !isLoading && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center text-white/80 max-w-md">
             <div className="text-6xl mb-4">☁️</div>
             <h2 className="text-2xl font-semibold mb-2">Bienvenido al Visor de Nubes de Puntos</h2>
             <p className="text-gray-300">
-              Carga un archivo LAS, LAZ, PLY o IFC para comenzar a visualizar tu nube de puntos en 3D
+              Carga archivos LAS, LAZ, PLY o IFC para comenzar a visualizar en 3D. Puedes cargar múltiples archivos.
             </p>
           </div>
         </div>

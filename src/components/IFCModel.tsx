@@ -24,15 +24,17 @@ export const IFCModel: React.FC<IFCModelProps> = ({ geometry, transparency }) =>
       
       // Update material with transparency
       if (clonedMesh.material) {
-        const material = clonedMesh.material as THREE.Material;
-        if (Array.isArray(material)) {
-          material.forEach(mat => {
-            mat.transparent = transparency < 1;
+        if (Array.isArray(clonedMesh.material)) {
+          clonedMesh.material.forEach(mat => {
+            mat.transparent = true;
             mat.opacity = transparency;
+            mat.needsUpdate = true;
           });
         } else {
-          material.transparent = transparency < 1;
+          const material = clonedMesh.material as THREE.Material;
+          material.transparent = true;
           material.opacity = transparency;
+          material.needsUpdate = true;
         }
       }
       

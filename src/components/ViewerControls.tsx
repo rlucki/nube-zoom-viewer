@@ -21,6 +21,7 @@ interface ViewerControlsProps {
   isVisible: boolean;
   onToggleVisibility: () => void;
   isPointCloud: boolean;
+  hasIFCModel: boolean;
 }
 
 export const ViewerControls: React.FC<ViewerControlsProps> = ({
@@ -37,6 +38,7 @@ export const ViewerControls: React.FC<ViewerControlsProps> = ({
   isVisible,
   onToggleVisibility,
   isPointCloud,
+  hasIFCModel,
 }) => {
   return (
     <>
@@ -59,14 +61,15 @@ export const ViewerControls: React.FC<ViewerControlsProps> = ({
             
             {/* Statistics */}
             <div className="text-sm text-gray-300 space-y-1">
-              {isPointCloud ? (
+              {isPointCloud && (
                 <>
                   <div>Total de puntos: {totalCount.toLocaleString()}</div>
                   <div>Puntos visibles: {visibleCount.toLocaleString()}</div>
                   <div>Densidad: {Math.round(density * 100)}%</div>
                 </>
-              ) : (
-                <div>Modelo 3D: Geometría IFC</div>
+              )}
+              {hasIFCModel && (
+                <div>Modelos IFC cargados</div>
               )}
             </div>
 
@@ -129,9 +132,9 @@ export const ViewerControls: React.FC<ViewerControlsProps> = ({
             )}
 
             {/* Transparency Control (for IFC models) */}
-            {!isPointCloud && (
+            {hasIFCModel && (
               <div className="space-y-2">
-                <Label className="text-white">Transparencia del Modelo</Label>
+                <Label className="text-white">Transparencia del Modelo IFC</Label>
                 <Slider
                   value={[transparency]}
                   onValueChange={(values) => setTransparency(values[0])}
