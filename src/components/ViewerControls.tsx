@@ -14,10 +14,13 @@ interface ViewerControlsProps {
   setPointSize: (value: number) => void;
   colorMode: 'rgb' | 'intensity' | 'height';
   setColorMode: (mode: 'rgb' | 'intensity' | 'height') => void;
-  totalPoints: number;
-  visiblePoints: number;
+  transparency: number;
+  setTransparency: (value: number) => void;
+  totalCount: number;
+  visibleCount: number;
   isVisible: boolean;
   onToggleVisibility: () => void;
+  isPointCloud: boolean;
 }
 
 export const ViewerControls: React.FC<ViewerControlsProps> = ({
@@ -27,10 +30,13 @@ export const ViewerControls: React.FC<ViewerControlsProps> = ({
   setPointSize,
   colorMode,
   setColorMode,
-  totalPoints,
-  visiblePoints,
+  transparency,
+  setTransparency,
+  totalCount,
+  visibleCount,
   isVisible,
   onToggleVisibility,
+  isPointCloud,
 }) => {
   return (
     <>
@@ -51,65 +57,94 @@ export const ViewerControls: React.FC<ViewerControlsProps> = ({
               Controles de Visualización
             </div>
             
-            {/* Point Statistics */}
+            {/* Statistics */}
             <div className="text-sm text-gray-300 space-y-1">
-              <div>Total de puntos: {totalPoints.toLocaleString()}</div>
-              <div>Puntos visibles: {visiblePoints.toLocaleString()}</div>
-              <div>Densidad: {Math.round(density * 100)}%</div>
+              {isPointCloud ? (
+                <>
+                  <div>Total de puntos: {totalCount.toLocaleString()}</div>
+                  <div>Puntos visibles: {visibleCount.toLocaleString()}</div>
+                  <div>Densidad: {Math.round(density * 100)}%</div>
+                </>
+              ) : (
+                <div>Modelo 3D: Geometría IFC</div>
+              )}
             </div>
 
-            {/* Density Control */}
-            <div className="space-y-2">
-              <Label className="text-white">Densidad de Puntos</Label>
-              <Slider
-                value={[density]}
-                onValueChange={(values) => setDensity(values[0])}
-                min={0.01}
-                max={1}
-                step={0.01}
-                className="w-full"
-              />
-              <div className="text-xs text-gray-400">
-                {Math.round(density * 100)}% ({visiblePoints.toLocaleString()} puntos)
+            {/* Point Cloud Controls */}
+            {isPointCloud && (
+              <>
+                {/* Density Control */}
+                <div className="space-y-2">
+                  <Label className="text-white">Densidad de Puntos</Label>
+                  <Slider
+                    value={[density]}
+                    onValueChange={(values) => setDensity(values[0])}
+                    min={0.01}
+                    max={1}
+                    step={0.01}
+                    className="w-full"
+                  />
+                  <div className="text-xs text-gray-400">
+                    {Math.round(density * 100)}% ({visibleCount.toLocaleString()} puntos)
+                  </div>
+                </div>
+
+                {/* Point Size Control */}
+                <div className="space-y-2">
+                  <Label className="text-white">Tamaño de Punto</Label>
+                  <Slider
+                    value={[pointSize]}
+                    onValueChange={(values) => setPointSize(values[0])}
+                    min={0.5}
+                    max={10}
+                    step={0.1}
+                    className="w-full"
+                  />
+                  <div className="text-xs text-gray-400">
+                    {pointSize.toFixed(1)} píxeles
+                  </div>
+                </div>
+
+                {/* Color Mode */}
+                <div className="space-y-2">
+                  <Label className="text-white">Modo de Color</Label>
+                  <Select value={colorMode} onValueChange={setColorMode}>
+                    <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-800 border-gray-600">
+                      <SelectItem value="rgb" className="text-white hover:bg-gray-700">
+                        RGB (Color original)
+                      </SelectItem>
+                      <SelectItem value="intensity" className="text-white hover:bg-gray-700">
+                        Intensidad
+                      </SelectItem>
+                      <SelectItem value="height" className="text-white hover:bg-gray-700">
+                        Altura (Z)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+
+            {/* Transparency Control (for IFC models) */}
+            {!isPointCloud && (
+              <div className="space-y-2">
+                <Label className="text-white">Transparencia del Modelo</Label>
+                <Slider
+                  value={[transparency]}
+                  onValueChange={(values) => setTransparency(values[0])}
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  className="w-full"
+                />
+                <div className="text-xs text-gray-400">
+                  {Math.round(transparency * 100)}% opacidad
+                </div>
               </div>
-            </div>
-
-            {/* Point Size Control */}
-            <div className="space-y-2">
-              <Label className="text-white">Tamaño de Punto</Label>
-              <Slider
-                value={[pointSize]}
-                onValueChange={(values) => setPointSize(values[0])}
-                min={0.5}
-                max={10}
-                step={0.1}
-                className="w-full"
-              />
-              <div className="text-xs text-gray-400">
-                {pointSize.toFixed(1)} píxeles
-              </div>
-            </div>
-
-            {/* Color Mode */}
-            <div className="space-y-2">
-              <Label className="text-white">Modo de Color</Label>
-              <Select value={colorMode} onValueChange={setColorMode}>
-                <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-800 border-gray-600">
-                  <SelectItem value="rgb" className="text-white hover:bg-gray-700">
-                    RGB (Color original)
-                  </SelectItem>
-                  <SelectItem value="intensity" className="text-white hover:bg-gray-700">
-                    Intensidad
-                  </SelectItem>
-                  <SelectItem value="height" className="text-white hover:bg-gray-700">
-                    Altura (Z)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            )}
 
             {/* Instructions */}
             <div className="text-xs text-gray-400 border-t border-gray-700 pt-2 space-y-1">

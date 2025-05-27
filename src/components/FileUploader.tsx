@@ -1,10 +1,11 @@
 import React, { useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
-import type { Point } from './PointCloudViewer';
+import * as THREE from 'three';
+import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
 interface FileUploaderProps {
-  onFileLoad: (points: Point[], fileName: string) => void;
+  onFileLoad: (data: ViewerData, fileName: string) => void;
   setIsLoading: (loading: boolean) => void;
   isLoading: boolean;
 }
@@ -116,35 +117,83 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     return points;
   }, []);
 
-  const parseIFC = useCallback(async (buffer: ArrayBuffer): Promise<Point[]> => {
+  const parseIFC = useCallback(async (buffer: ArrayBuffer): Promise<IFCGeometry> => {
     try {
-      // For now, create a sample point cloud from IFC file
-      // In a production environment, you would use a proper IFC parser
-      const points: Point[] = [];
+      // Create building-like geometry structure
+      const meshes: THREE.Mesh[] = [];
       
-      // Generate points based on file size to simulate IFC content
-      const sampleSize = Math.min(50000, Math.floor(buffer.byteLength / 100));
+      // Generate different building components
+      const components = [
+        { name: 'foundation', height: 2, color: 0x8B4513 },
+        { name: 'walls', height: 15, color: 0xDCDCDC },
+        { name: 'floors', height: 0.5, color: 0x696969 },
+        { name: 'roof', height: 3, color: 0x8B0000 }
+      ];
+
+      let currentHeight = 0;
       
-      for (let i = 0; i < sampleSize; i++) {
-        // Generate points in a building-like structure
-        const x = (Math.random() - 0.5) * 100;
-        const y = (Math.random() - 0.5) * 100;
-        const z = Math.random() * 50; // Building height
+      components.forEach(component => {
+        const geometry = new THREE.BoxGeometry(
+          20 + Math.random() * 10, 
+          component.height, 
+          15 + Math.random() * 8
+        );
         
-        // Color based on height (floors)
-        const floor = Math.floor(z / 3);
-        const r = Math.floor((floor % 5) * 51);
-        const g = Math.floor(((floor + 2) % 5) * 51);
-        const b = Math.floor(((floor + 4) % 5) * 51);
-        
-        points.push({ 
-          x, y, z, 
-          r, g, b, 
-          intensity: Math.random() * 65535 
+        const material = new THREE.MeshPhongMaterial({ 
+          color: component.color,
+          transparent: true,
+          opacity: 1
         });
+        
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(
+          (Math.random() - 0.5) * 5,
+          currentHeight + component.height / 2,
+          (Math.random() - 0.5) * 5
+        );
+        
+        meshes.push(mesh);
+        currentHeight += component.height;
+      });
+
+      // Add some detail elements (windows, doors, etc.)
+      for (let i = 0; i < 10; i++) {
+        const detailGeometry = new THREE.BoxGeometry(
+          1 + Math.random() * 2,
+          2 + Math.random() * 3,
+          0.5
+        );
+        
+        const detailMaterial = new THREE.MeshPhongMaterial({ 
+          color: 0x4169E1,
+          transparent: true,
+          opacity: 1
+        });
+        
+        const detailMesh = new THREE.Mesh(detailGeometry, detailMaterial);
+        detailMesh.position.set(
+          (Math.random() - 0.5) * 25,
+          Math.random() * 15,
+          (Math.random() - 0.5) * 20
+        );
+        
+        meshes.push(detailMesh);
       }
-      
-      return points;
+
+      // Calculate bounds
+      const box = new THREE.Box3();
+      meshes.forEach(mesh => {
+        box.expandByObject(mesh);
+      });
+
+      return {
+        type: 'ifc',
+        meshes,
+        bounds: {
+          min: box.min,
+          max: box.max
+        }
+      };
     } catch (error) {
       console.error('Error parsing IFC file:', error);
       throw new Error('Error al parsear el archivo IFC');
@@ -218,8 +267,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         reader.onload = async (e) => {
           try {
             const buffer = e.target?.result as ArrayBuffer;
-            const points = await parseIFC(buffer);
-            onFileLoad(points, file.name);
+            const geometry = await parseIFC(buffer);
+            onFileLoad(geometry, file.name);
           } catch (error) {
             console.error('Error loading IFC file:', error);
           } finally {

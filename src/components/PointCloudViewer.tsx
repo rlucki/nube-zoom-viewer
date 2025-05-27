@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
@@ -5,6 +6,7 @@ import * as THREE from 'three';
 import { FileUploader } from './FileUploader';
 import { ViewerControls } from './ViewerControls';
 import { PointCloud } from './PointCloud';
+import { IFCModel } from './IFCModel';
 import { useToast } from '@/hooks/use-toast';
 
 export interface Point {
@@ -17,43 +19,71 @@ export interface Point {
   intensity?: number;
 }
 
+export interface IFCGeometry {
+  type: 'ifc';
+  meshes: THREE.Mesh[];
+  bounds: {
+    min: THREE.Vector3;
+    max: THREE.Vector3;
+  };
+}
+
+export type ViewerData = Point[] | IFCGeometry;
+
 export const PointCloudViewer = () => {
-  const [points, setPoints] = useState<Point[]>([]);
+  const [data, setData] = useState<ViewerData>([]);
   const [density, setDensity] = useState(1);
   const [pointSize, setPointSize] = useState(2);
   const [colorMode, setColorMode] = useState<'rgb' | 'intensity' | 'height'>('rgb');
+  const [transparency, setTransparency] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [fileName, setFileName] = useState<string>('');
   const [controlsVisible, setControlsVisible] = useState(true);
   const { toast } = useToast();
 
+  const isPointCloud = Array.isArray(data);
+  const points = isPointCloud ? data as Point[] : [];
+
   const sampledPoints = useMemo(() => {
-    if (density >= 1) return points;
+    if (!isPointCloud || density >= 1) return points;
     const step = Math.ceil(1 / density);
     return points.filter((_, index) => index % step === 0);
-  }, [points, density]);
+  }, [points, density, isPointCloud]);
 
-  const handleFileLoad = useCallback((loadedPoints: Point[], name: string) => {
-    setPoints(loadedPoints);
+  const handleFileLoad = useCallback((loadedData: ViewerData, name: string) => {
+    setData(loadedData);
     setFileName(name);
     setDensity(1);
-    toast({
-      title: "Nube de puntos cargada",
-      description: `${loadedPoints.length.toLocaleString()} puntos cargados desde ${name}`,
-    });
+    setTransparency(1);
+    
+    if (Array.isArray(loadedData)) {
+      toast({
+        title: "Nube de puntos cargada",
+        description: `${loadedData.length.toLocaleString()} puntos cargados desde ${name}`,
+      });
+    } else {
+      toast({
+        title: "Modelo IFC cargado",
+        description: `Geometría 3D cargada desde ${name}`,
+      });
+    }
   }, [toast]);
 
   const handleReset = useCallback(() => {
-    setPoints([]);
+    setData([]);
     setFileName('');
     setDensity(1);
     setPointSize(2);
     setColorMode('rgb');
+    setTransparency(1);
   }, []);
 
   const toggleControlsVisibility = useCallback(() => {
     setControlsVisible(prev => !prev);
   }, []);
+
+  const totalCount = isPointCloud ? points.length : 1;
+  const visibleCount = isPointCloud ? sampledPoints.length : 1;
 
   return (
     <div className="w-full h-screen bg-gray-900 relative">
@@ -64,7 +94,7 @@ export const PointCloudViewer = () => {
             <h1 className="text-xl font-bold text-white">Visor de Nubes de Puntos</h1>
             {fileName && (
               <span className="text-sm text-gray-300">
-                {fileName} ({points.length.toLocaleString()} puntos)
+                {fileName} {isPointCloud ? `(${points.length.toLocaleString()} puntos)` : '(Modelo 3D)'}
               </span>
             )}
           </div>
@@ -74,7 +104,7 @@ export const PointCloudViewer = () => {
               setIsLoading={setIsLoading}
               isLoading={isLoading}
             />
-            {points.length > 0 && (
+            {(points.length > 0 || !isPointCloud) && (
               <button
                 onClick={handleReset}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
@@ -87,7 +117,7 @@ export const PointCloudViewer = () => {
       </div>
 
       {/* Controls Panel */}
-      {points.length > 0 && (
+      {(points.length > 0 || !isPointCloud) && (
         <ViewerControls
           density={density}
           setDensity={setDensity}
@@ -95,10 +125,13 @@ export const PointCloudViewer = () => {
           setPointSize={setPointSize}
           colorMode={colorMode}
           setColorMode={setColorMode}
-          totalPoints={points.length}
-          visiblePoints={sampledPoints.length}
+          transparency={transparency}
+          setTransparency={setTransparency}
+          totalCount={totalCount}
+          visibleCount={visibleCount}
           isVisible={controlsVisible}
           onToggleVisibility={toggleControlsVisibility}
+          isPointCloud={isPointCloud}
         />
       )}
 
@@ -107,7 +140,7 @@ export const PointCloudViewer = () => {
         <div className="absolute inset-0 z-20 bg-black/50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6 flex items-center gap-3">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-            <span>Cargando nube de puntos...</span>
+            <span>Cargando archivo...</span>
           </div>
         </div>
       )}
@@ -130,12 +163,19 @@ export const PointCloudViewer = () => {
         <directionalLight position={[10, 10, 5]} intensity={0.8} />
         <pointLight position={[-10, -10, -5]} intensity={0.3} />
 
-        {/* Point Cloud */}
-        {sampledPoints.length > 0 && (
+        {/* Render Point Cloud or IFC Model */}
+        {isPointCloud && sampledPoints.length > 0 && (
           <PointCloud 
             points={sampledPoints} 
             pointSize={pointSize}
             colorMode={colorMode}
+          />
+        )}
+
+        {!isPointCloud && (
+          <IFCModel 
+            geometry={data as IFCGeometry}
+            transparency={transparency}
           />
         )}
 
@@ -153,8 +193,8 @@ export const PointCloudViewer = () => {
         {/* Performance Stats */}
         <Stats />
 
-        {/* Grid helper when no points loaded */}
-        {points.length === 0 && (
+        {/* Grid helper when no data loaded */}
+        {points.length === 0 && isPointCloud && (
           <>
             <gridHelper args={[20, 20, '#333333', '#222222']} />
             <axesHelper args={[5]} />
@@ -163,7 +203,7 @@ export const PointCloudViewer = () => {
       </Canvas>
 
       {/* Welcome message */}
-      {points.length === 0 && !isLoading && (
+      {points.length === 0 && isPointCloud && !isLoading && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center text-white/80 max-w-md">
             <div className="text-6xl mb-4">☁️</div>
