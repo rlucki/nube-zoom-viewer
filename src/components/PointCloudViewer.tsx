@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import * as THREE from 'three';
@@ -45,6 +45,7 @@ export const PointCloudViewer = () => {
   const [transparency, setTransparency] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const controlsRef = useRef<any>(null);
   const { toast } = useToast();
 
   // Get all point clouds
@@ -61,6 +62,47 @@ export const PointCloudViewer = () => {
     const step = Math.ceil(1 / density);
     return allPoints.filter((_, index) => index % step === 0);
   }, [allPoints, density]);
+
+  // Auto-fit camera when new data is loaded
+  useEffect(() => {
+    if (controlsRef.current && loadedFiles.length > 0) {
+      const controls = controlsRef.current;
+      
+      // Calculate bounds of all data
+      const box = new THREE.Box3();
+      
+      // Add point cloud bounds
+      if (allPoints.length > 0) {
+        allPoints.forEach(point => {
+          box.expandByPoint(new THREE.Vector3(point.x, point.y, point.z));
+        });
+      }
+      
+      // Add IFC model bounds
+      ifcModels.forEach(file => {
+        const geometry = file.data as IFCGeometry;
+        if (geometry.bounds) {
+          box.expandByPoint(geometry.bounds.min);
+          box.expandByPoint(geometry.bounds.max);
+        }
+      });
+      
+      if (!box.isEmpty()) {
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const distance = maxDim * 2;
+        
+        controls.target.copy(center);
+        controls.object.position.set(
+          center.x + distance,
+          center.y + distance,
+          center.z + distance
+        );
+        controls.update();
+      }
+    }
+  }, [loadedFiles, allPoints, ifcModels]);
 
   const handleFileLoad = useCallback((loadedData: ViewerData, name: string) => {
     const isPointCloud = Array.isArray(loadedData);
@@ -92,6 +134,11 @@ export const PointCloudViewer = () => {
     setPointSize(2);
     setColorMode('rgb');
     setTransparency(1);
+    
+    // Reset camera position
+    if (controlsRef.current) {
+      controlsRef.current.reset();
+    }
   }, []);
 
   const toggleControlsVisibility = useCallback(() => {
@@ -176,7 +223,7 @@ export const PointCloudViewer = () => {
           position: [10, 10, 10], 
           fov: 60,
           near: 0.1,
-          far: 1000 
+          far: 10000 // Increased far distance
         }}
         className="absolute inset-0"
         gl={{ antialias: true, alpha: true }}
@@ -208,13 +255,14 @@ export const PointCloudViewer = () => {
 
         {/* Controls */}
         <OrbitControls
+          ref={controlsRef}
           enableDamping
           dampingFactor={0.05}
           rotateSpeed={0.5}
           zoomSpeed={1}
           panSpeed={0.8}
-          maxDistance={100}
-          minDistance={1}
+          maxDistance={1000} // Increased max distance
+          minDistance={0.1} // Decreased min distance
         />
 
         {/* Performance Stats */}

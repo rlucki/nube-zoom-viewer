@@ -1,6 +1,5 @@
 
 import React, { useRef, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { IFCGeometry } from './PointCloudViewer';
 
@@ -11,42 +10,51 @@ interface IFCModelProps {
 
 export const IFCModel: React.FC<IFCModelProps> = ({ geometry, transparency }) => {
   const groupRef = useRef<THREE.Group>(null);
+  const meshesRef = useRef<THREE.Mesh[]>([]);
 
+  // Initialize meshes only once
   useEffect(() => {
     if (!groupRef.current || !geometry.meshes) return;
 
     // Clear existing meshes
     groupRef.current.clear();
+    meshesRef.current = [];
 
-    // Add all meshes to the group
+    // Add all meshes to the group (only once)
     geometry.meshes.forEach(mesh => {
       const clonedMesh = mesh.clone();
-      
-      // Update material with transparency
-      if (clonedMesh.material) {
-        if (Array.isArray(clonedMesh.material)) {
-          clonedMesh.material.forEach(mat => {
+      meshesRef.current.push(clonedMesh);
+      groupRef.current!.add(clonedMesh);
+    });
+
+    // Center the model only once
+    const box = new THREE.Box3().setFromObject(groupRef.current);
+    const center = box.getCenter(new THREE.Vector3());
+    groupRef.current.position.copy(center.negate());
+
+  }, [geometry]);
+
+  // Update transparency without recreating meshes
+  useEffect(() => {
+    if (!meshesRef.current.length) return;
+
+    meshesRef.current.forEach(mesh => {
+      if (mesh.material) {
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(mat => {
             mat.transparent = true;
             mat.opacity = transparency;
             mat.needsUpdate = true;
           });
         } else {
-          const material = clonedMesh.material as THREE.Material;
+          const material = mesh.material as THREE.Material;
           material.transparent = true;
           material.opacity = transparency;
           material.needsUpdate = true;
         }
       }
-      
-      groupRef.current!.add(clonedMesh);
     });
-
-    // Center the model
-    const box = new THREE.Box3().setFromObject(groupRef.current);
-    const center = box.getCenter(new THREE.Vector3());
-    groupRef.current.position.copy(center.negate());
-
-  }, [geometry, transparency]);
+  }, [transparency]);
 
   return <group ref={groupRef} />;
 };
