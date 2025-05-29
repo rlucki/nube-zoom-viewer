@@ -3,7 +3,7 @@ import React, { useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import * as THREE from 'three';
-import { IfcLoader } from 'web-ifc-three';         // ← IMPORT CORRECTO
+import { IFCLoader } from 'web-ifc-three';     // ← import corregido a IFCLoader
 
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
@@ -20,23 +20,24 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ————————————————
-  // 1) Configuramos IfcLoader
-  // ————————————————
+  // ——————————————————————
+  // 1) Configuramos IFCLoader
+  // ——————————————————————
   const ifcLoader = useMemo(() => {
-    const loader = new IfcLoader();
+    const loader = new IFCLoader();
     console.log('🟢 web-ifc.wasm → /wasm/web-ifc.wasm');
     loader.ifcManager.setWasmPath('/wasm/');
     return loader;
   }, []);
 
-  // ————————————————
-  // 2) parsePLY (ASCII PLY)
-  // ————————————————
+  // ——————————————————————
+  // 2) parsePLY (ASCII)
+  // ——————————————————————
   const parsePLY = useCallback((text: string): Point[] => {
     const lines = text.split('\n');
     let count = 0;
     const pts: Point[] = [];
+
     for (const line of lines) {
       if (line.startsWith('element vertex')) {
         count = parseInt(line.split(' ')[2], 10);
@@ -44,26 +45,31 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         break;
       }
     }
+
     const data = lines.slice(lines.indexOf('end_header') + 1);
     for (let i = 0; i < Math.min(count, data.length); i++) {
       const vals = data[i].trim().split(/\s+/).map(Number);
       const p: Point = { x: vals[0], y: vals[1], z: vals[2] };
       if (vals.length >= 6) {
-        p.r = vals[3]; p.g = vals[4]; p.b = vals[5];
+        p.r = vals[3];
+        p.g = vals[4];
+        p.b = vals[5];
       }
       pts.push(p);
     }
     return pts;
   }, []);
 
-  // ————————————————
+  // ——————————————————————
   // 3) parseLAS (binario LAS/LAZ)
-  // ————————————————
+  // ——————————————————————
   const parseLAS = useCallback((buffer: ArrayBuffer): Point[] => {
     const view = new DataView(buffer);
     const sig = String.fromCharCode(
-      view.getUint8(0), view.getUint8(1),
-      view.getUint8(2), view.getUint8(3)
+      view.getUint8(0),
+      view.getUint8(1),
+      view.getUint8(2),
+      view.getUint8(3)
     );
     if (sig !== 'LASF') throw new Error('No es un LAS válido');
 
@@ -83,6 +89,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     for (let i = 0; i < maxPts; i++) {
       const off = offsetHeader + i * recLen;
       if (off + 20 > buffer.byteLength) break;
+
       const x = view.getInt32(off,     true) * xScale + xOff;
       const y = view.getInt32(off + 4, true) * yScale + yOff;
       const z = view.getInt32(off + 8, true) * zScale + zOff;
@@ -100,21 +107,20 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     return pts;
   }, []);
 
-  // ————————————————
-  // 4) parseIFC real con loadAsync
-  // ————————————————
+  // ——————————————————————
+  // 4) parseIFC con loadAsync
+  // ——————————————————————
   const parseIFC = useCallback(
     async (buffer: ArrayBuffer): Promise<IFCGeometry> => {
-      // Blob URL para simular una URL remota
       const blob = new Blob([buffer], { type: 'application/octet-stream' });
       const url  = URL.createObjectURL(blob);
 
       try {
-        // USAMOS LA INSTANCIA: ifcLoader.loadAsync
-        const model = (await ifcLoader.loadAsync(url)) as THREE.Group;
+        // USAMOS LA INSTANCIA: ifcLoader.loadAsync()
+        const modelGroup = (await ifcLoader.loadAsync(url)) as THREE.Group;
 
         const meshes: THREE.Mesh[] = [];
-        model.traverse(child => {
+        modelGroup.traverse(child => {
           if ((child as THREE.Mesh).isMesh) {
             const m = (child as THREE.Mesh).clone();
             m.geometry.computeBoundingBox();
@@ -123,7 +129,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
           }
         });
 
-        const box = new THREE.Box3().setFromObject(model);
+        const box = new THREE.Box3().setFromObject(modelGroup);
         return {
           type: 'ifc',
           meshes,
@@ -136,16 +142,17 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     [ifcLoader]
   );
 
-  // ————————————————
+  // ——————————————————————
   // 5) handleFileSelect
-  // ————————————————
+  // ——————————————————————
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      setIsLoading(true);
 
+      setIsLoading(true);
       const name = file.name.toLowerCase();
+
       try {
         if (name.endsWith('.ply')) {
           const txt = await file.text();
