@@ -29,9 +29,9 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   const ifcLoader = useMemo(() => {
     const loader = new IFCLoader();
     
-    // Configuramos directamente con la URL del WASM
-    console.log('➜ Usando WASM en:', wasmUrl);
-    loader.ifcManager.setWasmPath(wasmUrl);
+    // Configuramos para usar el WASM desde public/wasm/
+    console.log('➜ Configurando IFC Loader para usar WASM desde /wasm/');
+    loader.ifcManager.setWasmPath('/wasm/');
     
     return loader;
   }, []);

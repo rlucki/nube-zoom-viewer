@@ -1,0 +1,3 @@
+
+# This file ensures the wasm directory is tracked by git
+# The web-ifc.wasm file should be copied here manually from node_modules/web-ifc/web-ifc.wasm
