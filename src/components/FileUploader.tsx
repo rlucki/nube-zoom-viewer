@@ -3,9 +3,6 @@ import React, { useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import * as THREE from 'three';
-
-// 1) Importamos el .wasm como URL para que Vite lo trate como asset
-import wasmUrl from 'web-ifc-three/lin/web-ifc.wasm?url';
 import { IfcLoader } from 'web-ifc-three';
 
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
@@ -24,22 +21,19 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // —————————————————————————————————————————————————————————
-  // 2) Inicializamos el IfcLoader con la ruta correcta al .wasm
-  //    Gracias al ?url, `wasmUrl` será algo tipo '/assets/web-ifc.ABCD.wasm'
+  // Inicializamos el IfcLoader con la ruta al WASM desde public/
   // —————————————————————————————————————————————————————————
   const ifcLoader = useMemo(() => {
     const loader = new IfcLoader();
-    console.log('🟢 Configurando web-ifc.wasm en:', wasmUrl);
-    loader.ifcManager.setWasmPath(wasmUrl);
-    // loader.ifcManager.useWebWorkers(true, '/ifcWorker.js'); // opcional
+    console.log('🟢 Configurando web-ifc.wasm desde /wasm/');
+    loader.ifcManager.setWasmPath('/wasm/');
     return loader;
   }, []);
 
   // —————————————————————————————————————————————————————————
-  // 3) Parseadores de nubes de puntos (PLY & LAS), sin cambios
+  // Parseadores de nubes de puntos (PLY & LAS)
   // —————————————————————————————————————————————————————————
   const parsePLY = useCallback((text: string): Point[] => {
-    /* ... tu código de PLY ... */
     const lines = text.split('\n');
     let vertexCount = 0;
     const points: Point[] = [];
@@ -63,7 +57,6 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   }, []);
 
   const parseLAS = useCallback((buffer: ArrayBuffer): Point[] => {
-    /* ... tu código de LAS ... */
     const view = new DataView(buffer);
     const sig = String.fromCharCode(
       view.getUint8(0),
@@ -104,18 +97,18 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   }, []);
 
   // —————————————————————————————————————————————————————————
-  // 4) Nuevo parseIFC: usamos loadAsync para asegurar compatibilidad
+  // Parseador IFC usando loadAsync
   // —————————————————————————————————————————————————————————
   const parseIFC = useCallback(
     async (buffer: ArrayBuffer): Promise<IFCGeometry> => {
-      // 4.1 Creamos un Blob URL para simular una URL remota
+      // Creamos un Blob URL para simular una URL remota
       const blob = new Blob([buffer], { type: 'application/octet-stream' });
       const url  = URL.createObjectURL(blob);
 
-      // 4.2 Cargamos con loadAsync en lugar de parse (más robusto)
+      // Cargamos con loadAsync en lugar de parse (más robusto)
       const modelGroup: THREE.Group = await ifcLoader.loadAsync(url);
 
-      // 4.3 Extraemos todas las meshes reales del IFC
+      // Extraemos todas las meshes reales del IFC
       const meshes: THREE.Mesh[] = [];
       modelGroup.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
@@ -126,7 +119,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         }
       });
 
-      // 4.4 Calculamos la caja envolvente global para retornarla
+      // Calculamos la caja envolvente global para retornarla
       const boundsBox = new THREE.Box3().setFromObject(modelGroup);
 
       return {
@@ -142,7 +135,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   );
 
   // —————————————————————————————————————————————————————————
-  // 5) Manejador de selección de archivo
+  // Manejador de selección de archivo
   // —————————————————————————————————————————————————————————
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
