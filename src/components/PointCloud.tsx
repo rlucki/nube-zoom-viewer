@@ -17,7 +17,8 @@ interface PointCloudProps {
 /**
  * Renders a LAS/LAZ-style point cloud and
  * *automatically recentres it at (0, 0, 0)*
- * so it se superimposes correctly on other models.
+ * so it superimposes correctly on other models,
+ * and aligns Z as vertical.
  */
 export const PointCloud: React.FC<PointCloudProps> = ({
   points,
@@ -73,7 +74,6 @@ export const PointCloud: React.FC<PointCloudProps> = ({
         }
       } else if (colorMode === 'intensity' && p.intensity !== undefined && maxIntensity > minIntensity) {
         const t = (p.intensity - minIntensity) / (maxIntensity - minIntensity);
-        /* Simple four-colour heat-map: blue → cyan → green → yellow → red */
         if (t < 0.25)       { r = 0;        g = t * 4;            b = 1;               }
         else if (t < 0.50)  { r = 0;        g = 1;                b = 1 - (t - 0.25)*4;}
         else if (t < 0.75)  { r = (t - .5)*4; g = 1;              b = 0;               }
@@ -106,17 +106,8 @@ export const PointCloud: React.FC<PointCloudProps> = ({
     /* ---------- 6. Recompute boundingSphere so culling works ---------- */
     geometry.computeBoundingSphere();
 
-    // ─── ALINEAR EJE Z COMO VERTICAL ─────────────────────────────────
-    // Las nubes suelen venir con Z→arriba en vez de Y→arriba,
-    // así que rotamos -90° en X para "levantar" la nube.
+    /* ---------- 6a. Rotate cloud so Z is vertical ---------- */
     geometry.rotateX(-Math.PI / 2);
-
-    /* ---------- 7. Create material ---------- */
-    const material = new THREE.PointsMaterial({
-      size: pointSize * 0.1,    // screen pixels
-      vertexColors: true,
-      sizeAttenuation: false,   // keep size constant regardless of distance
-    });
 
     /* ---------- 7. Create material ---------- */
     const material = new THREE.PointsMaterial({
