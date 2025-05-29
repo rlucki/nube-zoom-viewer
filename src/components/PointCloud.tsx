@@ -113,7 +113,7 @@ export const PointCloud: React.FC<PointCloudProps> = ({
     const material = new THREE.PointsMaterial({
       size: pointSize,
       vertexColors: true,
-      sizeAttenuation: true, // Changed to true for better scaling
+      sizeAttenuation: true,
     });
     
     return { geometry, material };

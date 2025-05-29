@@ -223,7 +223,7 @@ export const PointCloudViewer = () => {
           position: [10, 10, 10], 
           fov: 60,
           near: 0.1,
-          far: 10000 // Increased far distance
+          far: 10000
         }}
         className="absolute inset-0"
         gl={{ antialias: true, alpha: true }}
@@ -261,8 +261,8 @@ export const PointCloudViewer = () => {
           rotateSpeed={0.5}
           zoomSpeed={1}
           panSpeed={0.8}
-          maxDistance={1000} // Increased max distance
-          minDistance={0.1} // Decreased min distance
+          maxDistance={1000}
+          minDistance={0.1}
         />
 
         {/* Performance Stats */}
