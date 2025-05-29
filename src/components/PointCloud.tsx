@@ -53,15 +53,19 @@ export const PointCloud: React.FC<PointCloudProps> = ({
       let r = 0.8, g = 0.8, b = 0.8;
       if (colorMode === 'rgb' && p.r !== undefined) {
         r = p.r / 255; g = p.g! / 255; b = p.b! / 255;
-      } else if (colorMode === 'intensity' && maxI > minI && p.intensity !== undefined) {
+      } else if (
+        colorMode === 'intensity' && maxI > minI && p.intensity !== undefined
+      ) {
         const t = (p.intensity - minI) / (maxI - minI);
-        if (t < 0.25)       { r = 0; g = t * 4;     b = 1; }
-        else if (t < 0.5)   { r = 0; g = 1;           b = 1 - (t - 0.25)*4; }
-        else if (t < 0.75)  { r = (t - 0.5)*4; g = 1; b = 0; }
-        else                { r = 1; g = 1 - (t - 0.75)*4; b = 0; }
+        if (t < 0.25)       { r = 0; g = t * 4;           b = 1; }
+        else if (t < 0.5)   { r = 0; g = 1;               b = 1 - (t - 0.25) * 4; }
+        else if (t < 0.75)  { r = (t - 0.5) * 4; g = 1; b = 0; }
+        else                { r = 1; g = 1 - (t - 0.75) * 4; b = 0; }
       } else if (colorMode === 'height' && maxZ > minZ) {
         const t = (p.z - minZ) / (maxZ - minZ);
-        r = t; g = 1 - Math.abs(t - 0.5)*2; b = 1 - t;
+        r = t;
+        g = 1 - Math.abs(t - 0.5) * 2;
+        b = 1 - t;
       }
       colors[i3]     = r;
       colors[i3 + 1] = g;
