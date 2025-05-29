@@ -106,6 +106,18 @@ export const PointCloud: React.FC<PointCloudProps> = ({
     /* ---------- 6. Recompute boundingSphere so culling works ---------- */
     geometry.computeBoundingSphere();
 
+    // ─── ALINEAR EJE Z COMO VERTICAL ─────────────────────────────────
+    // Las nubes suelen venir con Z→arriba en vez de Y→arriba,
+    // así que rotamos -90° en X para "levantar" la nube.
+    geometry.rotateX(-Math.PI / 2);
+
+    /* ---------- 7. Create material ---------- */
+    const material = new THREE.PointsMaterial({
+      size: pointSize * 0.1,    // screen pixels
+      vertexColors: true,
+      sizeAttenuation: false,   // keep size constant regardless of distance
+    });
+
     /* ---------- 7. Create material ---------- */
     const material = new THREE.PointsMaterial({
       size: pointSize * 0.1,    // screen pixels
