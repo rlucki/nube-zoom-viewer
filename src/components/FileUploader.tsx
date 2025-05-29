@@ -3,7 +3,7 @@ import React, { useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import * as THREE from 'three';
-import { IfcLoader } from 'web-ifc-three';              // ← import correcto
+import { IfcLoader } from 'web-ifc-three';         // ← IMPORT CORRECTO
 
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
@@ -20,128 +20,114 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // —————————————————————————————————————————————————————————
-  // 1) Inicializamos el IfcLoader apuntando al WASM en public/wasm
-  // —————————————————————————————————————————————————————————
+  // ————————————————
+  // 1) Configuramos IfcLoader
+  // ————————————————
   const ifcLoader = useMemo(() => {
     const loader = new IfcLoader();
-    console.log('🟢 web-ifc.wasm path → /wasm/web-ifc.wasm');
+    console.log('🟢 web-ifc.wasm → /wasm/web-ifc.wasm');
     loader.ifcManager.setWasmPath('/wasm/');
     return loader;
   }, []);
 
-  // —————————————————————————————————————————————————————————
-  // 2) Parseador PLY (ASCII)
-  // —————————————————————————————————————————————————————————
+  // ————————————————
+  // 2) parsePLY (ASCII PLY)
+  // ————————————————
   const parsePLY = useCallback((text: string): Point[] => {
     const lines = text.split('\n');
-    let vertexCount = 0;
-    const points: Point[] = [];
-
-    // Header
+    let count = 0;
+    const pts: Point[] = [];
     for (const line of lines) {
       if (line.startsWith('element vertex')) {
-        vertexCount = parseInt(line.split(' ')[2], 10);
+        count = parseInt(line.split(' ')[2], 10);
       } else if (line.trim() === 'end_header') {
         break;
       }
     }
-
-    // Vértices
-    const dataLines = lines.slice(lines.indexOf('end_header') + 1);
-    for (let i = 0; i < Math.min(vertexCount, dataLines.length); i++) {
-      const vals = dataLines[i].trim().split(/\s+/).map(Number);
+    const data = lines.slice(lines.indexOf('end_header') + 1);
+    for (let i = 0; i < Math.min(count, data.length); i++) {
+      const vals = data[i].trim().split(/\s+/).map(Number);
       const p: Point = { x: vals[0], y: vals[1], z: vals[2] };
       if (vals.length >= 6) {
         p.r = vals[3]; p.g = vals[4]; p.b = vals[5];
       }
-      points.push(p);
+      pts.push(p);
     }
-    return points;
+    return pts;
   }, []);
 
-  // —————————————————————————————————————————————————————————
-  // 3) Parseador LAS/LAZ (binario, muy simplificado)
-  // —————————————————————————————————————————————————————————
+  // ————————————————
+  // 3) parseLAS (binario LAS/LAZ)
+  // ————————————————
   const parseLAS = useCallback((buffer: ArrayBuffer): Point[] => {
     const view = new DataView(buffer);
     const sig = String.fromCharCode(
-      view.getUint8(0),
-      view.getUint8(1),
-      view.getUint8(2),
-      view.getUint8(3)
+      view.getUint8(0), view.getUint8(1),
+      view.getUint8(2), view.getUint8(3)
     );
     if (sig !== 'LASF') throw new Error('No es un LAS válido');
 
-    const pointDataOffset = view.getUint32(96, true);
-    const numPoints       = view.getUint32(107, true);
-    const recordLength    = view.getUint16(105, true);
+    const offsetHeader = view.getUint32(96, true);
+    const numPts       = view.getUint32(107, true);
+    const recLen       = view.getUint16(105, true);
+    const xScale       = view.getFloat64(131, true);
+    const yScale       = view.getFloat64(139, true);
+    const zScale       = view.getFloat64(147, true);
+    const xOff         = view.getFloat64(155, true);
+    const yOff         = view.getFloat64(163, true);
+    const zOff         = view.getFloat64(171, true);
 
-    const xScale = view.getFloat64(131, true);
-    const yScale = view.getFloat64(139, true);
-    const zScale = view.getFloat64(147, true);
-    const xOff   = view.getFloat64(155, true);
-    const yOff   = view.getFloat64(163, true);
-    const zOff   = view.getFloat64(171, true);
-
-    const maxPts = Math.min(numPoints, 200_000);
-    const points: Point[] = [];
+    const maxPts = Math.min(numPts, 200_000);
+    const pts: Point[] = [];
 
     for (let i = 0; i < maxPts; i++) {
-      const offset = pointDataOffset + i * recordLength;
-      if (offset + 20 > buffer.byteLength) break;
-
-      const x = view.getInt32(offset,     true) * xScale + xOff;
-      const y = view.getInt32(offset + 4, true) * yScale + yOff;
-      const z = view.getInt32(offset + 8, true) * zScale + zOff;
-      const intensity = view.getUint16(offset + 12, true);
+      const off = offsetHeader + i * recLen;
+      if (off + 20 > buffer.byteLength) break;
+      const x = view.getInt32(off,     true) * xScale + xOff;
+      const y = view.getInt32(off + 4, true) * yScale + yOff;
+      const z = view.getInt32(off + 8, true) * zScale + zOff;
+      const intensity = view.getUint16(off + 12, true);
 
       let r, g, b;
-      if (recordLength >= 26) {
-        r = view.getUint16(offset + 20, true) / 256;
-        g = view.getUint16(offset + 22, true) / 256;
-        b = view.getUint16(offset + 24, true) / 256;
+      if (recLen >= 26) {
+        r = view.getUint16(off + 20, true) / 256;
+        g = view.getUint16(off + 22, true) / 256;
+        b = view.getUint16(off + 24, true) / 256;
       }
 
-      points.push({ x, y, z, intensity, r, g, b });
+      pts.push({ x, y, z, intensity, r, g, b });
     }
-    return points;
+    return pts;
   }, []);
 
-  // —————————————————————————————————————————————————————————
-  // 4) Parseador IFC real usando loadAsync()
-  // —————————————————————————————————————————————————————————
+  // ————————————————
+  // 4) parseIFC real con loadAsync
+  // ————————————————
   const parseIFC = useCallback(
     async (buffer: ArrayBuffer): Promise<IFCGeometry> => {
-      // 1) Blob URL para simular URL externa
+      // Blob URL para simular una URL remota
       const blob = new Blob([buffer], { type: 'application/octet-stream' });
       const url  = URL.createObjectURL(blob);
 
       try {
-        // 2) Aquí usamos la instancia: ifcLoader.loadAsync, no la clase
-        const modelGroup = (await ifcLoader.loadAsync(url)) as THREE.Group;
+        // USAMOS LA INSTANCIA: ifcLoader.loadAsync
+        const model = (await ifcLoader.loadAsync(url)) as THREE.Group;
 
-        // 3) Extraemos cada mesh
         const meshes: THREE.Mesh[] = [];
-        modelGroup.traverse((child) => {
+        model.traverse(child => {
           if ((child as THREE.Mesh).isMesh) {
-            const mesh = (child as THREE.Mesh).clone();
-            mesh.geometry.computeBoundingBox();
-            mesh.frustumCulled = false;
-            meshes.push(mesh);
+            const m = (child as THREE.Mesh).clone();
+            m.geometry.computeBoundingBox();
+            m.frustumCulled = false;
+            meshes.push(m);
           }
         });
 
-        // 4) Calculamos bounds
-        const boundsBox = new THREE.Box3().setFromObject(modelGroup);
-
+        const box = new THREE.Box3().setFromObject(model);
         return {
           type: 'ifc',
           meshes,
-          bounds: {
-            min: boundsBox.min.clone(),
-            max: boundsBox.max.clone(),
-          },
+          bounds: { min: box.min.clone(), max: box.max.clone() },
         };
       } finally {
         URL.revokeObjectURL(url);
@@ -150,9 +136,9 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     [ifcLoader]
   );
 
-  // —————————————————————————————————————————————————————————
-  // 5) Handler: lee el archivo y llama al parseador adecuado
-  // —————————————————————————————————————————————————————————
+  // ————————————————
+  // 5) handleFileSelect
+  // ————————————————
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -185,7 +171,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     },
-    [onFileLoad, parsePLY, parseLAS, parseIFC, setIsLoading]
+    [parsePLY, parseLAS, parseIFC, onFileLoad, setIsLoading]
   );
 
   return (
