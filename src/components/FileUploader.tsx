@@ -3,7 +3,7 @@ import React, { useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import * as THREE from 'three';
-import { IFCLoader } from 'web-ifc-three';  // ← Import correcto
+import { IFCLoader } from 'web-ifc-three';
 
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
@@ -20,25 +20,17 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ———————————————
-  // 1) Inicializa IFCLoader
-  // ———————————————
+  // 1) IFCLoader con WASM
   const ifcLoader = useMemo(() => {
     const loader = new IFCLoader();
-    console.log('🟢 web-ifc.wasm path → /wasm/web-ifc.wasm');
-    loader.ifcManager.setWasmPath('/wasm/');  // debe servir public/wasm/web-ifc.wasm
+    loader.ifcManager.setWasmPath('/wasm/');
     return loader;
   }, []);
 
-  // ———————————————
-  // 2) parsePLY (ASCII)
-  // ———————————————
+  // 2) parsePLY
   const parsePLY = useCallback((text: string): Point[] => {
     const lines = text.split('\n');
     let count = 0;
-    const pts: Point[] = [];
-
-    // Header
     for (const line of lines) {
       if (line.startsWith('element vertex')) {
         count = parseInt(line.split(' ')[2], 10);
@@ -46,9 +38,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         break;
       }
     }
-
-    // Datos
     const data = lines.slice(lines.indexOf('end_header') + 1);
+    const pts: Point[] = [];
     for (let i = 0; i < Math.min(count, data.length); i++) {
       const vals = data[i].trim().split(/\s+/).map(Number);
       const p: Point = { x: vals[0], y: vals[1], z: vals[2] };
@@ -60,130 +51,109 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     return pts;
   }, []);
 
-  // ———————————————
-  // 3) parseLAS (binario)
-  // ———————————————
+  // 3) parseLAS con Scale+Offset y sin límite
   const parseLAS = useCallback((buffer: ArrayBuffer): Point[] => {
     const view = new DataView(buffer);
-    const sig = String.fromCharCode(
-      view.getUint8(0),
-      view.getUint8(1),
-      view.getUint8(2),
-      view.getUint8(3)
+    // Firma LAS
+    const signature = String.fromCharCode(
+      view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3)
     );
-    if (sig !== 'LASF') throw new Error('No es un LAS válido');
+    if (signature !== 'LASF') throw new Error('No es un LAS válido');
 
-    const offsetHeader = view.getUint32(96, true);
-    const numPts       = view.getUint32(107, true);
-    const recLen       = view.getUint16(105, true);
-    const xScale       = view.getFloat64(131, true);
-    const yScale       = view.getFloat64(139, true);
-    const zScale       = view.getFloat64(147, true);
-    const xOff         = view.getFloat64(155, true);
-    const yOff         = view.getFloat64(163, true);
-    const zOff         = view.getFloat64(171, true);
+    // Offset, recLen, count
+    const pointDataOffset       = view.getUint32(96,  true);
+    const numberOfPoints        = view.getUint32(107, true);
+    const pointDataRecordLength = view.getUint16(105, true);
 
-    const maxPts = Math.min(numPts, 200_000);
+    // Scale + Offset del header
+    const xScale  = view.getFloat64(131, true);
+    const yScale  = view.getFloat64(139, true);
+    const zScale  = view.getFloat64(147, true);
+    const xOffset = view.getFloat64(155, true);
+    const yOffset = view.getFloat64(163, true);
+    const zOffset = view.getFloat64(171, true);
+
+    // Aviso si no hay geolocalización
+    if (Math.abs(xOffset) < 1e-6 && Math.abs(yOffset) < 1e-6 && Math.abs(zOffset) < 1e-6) {
+      console.warn('LAS sin offset: se mostrará centrado local en (0,0,0).');
+    }
+
     const pts: Point[] = [];
-
-    for (let i = 0; i < maxPts; i++) {
-      const off = offsetHeader + i * recLen;
+    for (let i = 0; i < numberOfPoints; i++) {
+      const off = pointDataOffset + i * pointDataRecordLength;
       if (off + 20 > buffer.byteLength) break;
 
-      const x = view.getInt32(off,     true) * xScale + xOff;
-      const y = view.getInt32(off + 4, true) * yScale + yOff;
-      const z = view.getInt32(off + 8, true) * zScale + zOff;
-      const intensity = view.getUint16(off + 12, true);
+      // Coordenadas reales
+      const rawX = view.getInt32(off,     true);
+      const rawY = view.getInt32(off + 4, true);
+      const rawZ = view.getInt32(off + 8, true);
+      const x = rawX * xScale + xOffset;
+      const y = rawY * yScale + yOffset;
+      const z = rawZ * zScale + zOffset;
 
-      let r, g, b;
-      if (recLen >= 26) {
+      // Intensidad + RGB
+      const intensity = view.getUint16(off + 12, true);
+      let r: number|undefined, g: number|undefined, b: number|undefined;
+      if (pointDataRecordLength >= 26) {
         r = view.getUint16(off + 20, true) / 256;
         g = view.getUint16(off + 22, true) / 256;
         b = view.getUint16(off + 24, true) / 256;
       }
-
       pts.push({ x, y, z, intensity, r, g, b });
     }
     return pts;
   }, []);
 
-  // ———————————————
-  // 4) parseIFC con loadAsync
-  // ———————————————
-  const parseIFC = useCallback(
-    async (buffer: ArrayBuffer): Promise<IFCGeometry> => {
-      const blob = new Blob([buffer], { type: 'application/octet-stream' });
-      const url  = URL.createObjectURL(blob);
-
-      try {
-        // Usa la instancia, no la clase
-        const group = (await ifcLoader.loadAsync(url)) as THREE.Group;
-
-        // Extrae todas las meshes
-        const meshes: THREE.Mesh[] = [];
-        group.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const m = (child as THREE.Mesh).clone();
-            m.geometry.computeBoundingBox();
-            m.frustumCulled = false;
-            meshes.push(m);
-          }
-        });
-
-        // Bounding box global
-        const box = new THREE.Box3().setFromObject(group);
-        return {
-          type: 'ifc',
-          meshes,
-          bounds: {
-            min: box.min.clone(),
-            max: box.max.clone(),
-          },
-        };
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-    },
-    [ifcLoader]
-  );
-
-  // ———————————————
-  // 5) Manejador de archivo
-  // ———————————————
-  const handleFileSelect = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      setIsLoading(true);
-      const name = file.name.toLowerCase();
-
-      try {
-        if (name.endsWith('.ply')) {
-          const txt = await file.text();
-          onFileLoad(parsePLY(txt), file.name);
-
-        } else if (name.endsWith('.las') || name.endsWith('.laz')) {
-          const buf = await file.arrayBuffer();
-          onFileLoad(parseLAS(buf), file.name);
-
-        } else if (name.endsWith('.ifc')) {
-          const buf  = await file.arrayBuffer();
-          const geom = await parseIFC(buf);
-          onFileLoad(geom, file.name);
-
-        } else {
-          alert('Formato no soportado. Usa .PLY, .LAS, .LAZ o .IFC');
+  // 4) parseIFC
+  const parseIFC = useCallback(async (buffer: ArrayBuffer): Promise<IFCGeometry> => {
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    const url  = URL.createObjectURL(blob);
+    try {
+      const group = await ifcLoader.loadAsync(url) as THREE.Group;
+      const meshes: THREE.Mesh[] = [];
+      group.traverse(child => {
+        if ((child as THREE.Mesh).isMesh) {
+          const m = (child as THREE.Mesh).clone();
+          m.geometry.computeBoundingBox();
+          m.frustumCulled = false;
+          meshes.push(m);
         }
-      } catch (err) {
-        console.error('🚨 Error cargando archivo:', err);
-        alert('Hubo un error al procesar el archivo. Mira la consola.');
-      } finally {
-        setIsLoading(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+      });
+      const box = new THREE.Box3().setFromObject(group);
+      return { type: 'ifc', meshes, bounds: { min: box.min.clone(), max: box.max.clone() }};
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }, [ifcLoader]);
+
+  // 5) handleFileSelect
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsLoading(true);
+
+    try {
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.ply')) {
+        const txt = await file.text();
+        onFileLoad(parsePLY(txt), file.name);
+      } else if (name.endsWith('.las') || name.endsWith('.laz')) {
+        const buf = await file.arrayBuffer();
+        onFileLoad(parseLAS(buf), file.name);
+      } else if (name.endsWith('.ifc')) {
+        const buf = await file.arrayBuffer();
+        onFileLoad(await parseIFC(buf), file.name);
+      } else {
+        alert('Formato no soportado.');
       }
-    },
-    [parsePLY, parseLAS, parseIFC, onFileLoad, setIsLoading]
-  );
+    } catch (err) {
+      console.error(err);
+      alert('Error al procesar archivo.');
+    } finally {
+      setIsLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, [parsePLY, parseLAS, parseIFC, onFileLoad]);
 
   return (
     <div className="flex items-center gap-2">
@@ -194,13 +164,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         onChange={handleFileSelect}
         className="hidden"
       />
-      <Button
-        onClick={() => fileInputRef.current?.click()}
-        disabled={isLoading}
-        className="bg-blue-600 hover:bg-blue-700"
-      >
-        <Upload className="w-4 h-4 mr-2" />
-        Cargar Archivo
+      <Button onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
+        <Upload className="w-4 h-4 mr-2" /> Cargar Archivo
       </Button>
     </div>
   );
