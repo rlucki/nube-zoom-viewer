@@ -6,6 +6,9 @@ import * as THREE from 'three';
 import { IFCLoader } from 'web-ifc-three/IFCLoader';
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
+// Importamos el WASM como URL de módulo para que Vite lo maneje correctamente
+import wasmUrl from 'web-ifc/web-ifc.wasm?url';
+
 interface FileUploaderProps {
   onFileLoad: (data: ViewerData, fileName: string) => void;
   setIsLoading: (loading: boolean) => void;
@@ -20,15 +23,19 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ——————————————————————————————————————————————————
-  // 1) Configuramos el IfcLoader de web-ifc-three
+  // 1) Configuramos el IFCLoader de web-ifc-three
   //    Sólo se crea una vez con useMemo para no recargar el WASM.
   // ——————————————————————————————————————————————————
   const ifcLoader = useMemo(() => {
     const loader = new IFCLoader();
-    // Indica la ruta al directorio donde sirves web-ifc.wasm
-    loader.ifcManager.setWasmPath('/wasm/');
-    // Opcional: mejora rendimiento con Web Workers
-    // loader.ifcManager.useWebWorkers(true, '/ifcWorker.js');
+    
+    // Configuramos la ruta del WASM usando la URL importada
+    const wasmPath = wasmUrl.substring(0, wasmUrl.lastIndexOf('/') + 1);
+    loader.ifcManager.setWasmPath(wasmPath);
+    
+    console.log('IFC Loader configurado con WASM path:', wasmPath);
+    console.log('WASM URL completa:', wasmUrl);
+    
     return loader;
   }, []);
 
@@ -125,31 +132,41 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   // ——————————————————————————————————————————————————
   const parseIFC = useCallback(
     async (buffer: ArrayBuffer): Promise<IFCGeometry> => {
-      // 4.1 Parseamos todo el buffer y obtenemos un THREE.Group
-      const modelGroup = await ifcLoader.parse(buffer);
+      try {
+        console.log('Iniciando parseo de IFC, tamaño del buffer:', buffer.byteLength);
+        
+        // 4.1 Parseamos todo el buffer y obtenemos un THREE.Group
+        const modelGroup = await ifcLoader.parse(buffer);
+        console.log('IFC parseado exitosamente:', modelGroup);
 
-      // 4.2 Recorremos el grupo y clonamos todas las meshes
-      const meshes: THREE.Mesh[] = [];
-      modelGroup.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mesh = (child as THREE.Mesh).clone();
-          mesh.geometry.computeBoundingBox();
-          mesh.frustumCulled = false;
-          meshes.push(mesh);
-        }
-      });
+        // 4.2 Recorremos el grupo y clonamos todas las meshes
+        const meshes: THREE.Mesh[] = [];
+        modelGroup.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = (child as THREE.Mesh).clone();
+            mesh.geometry.computeBoundingBox();
+            mesh.frustumCulled = false;
+            meshes.push(mesh);
+          }
+        });
 
-      // 4.3 Calculamos la bounding box global para devolver bounds
-      const globalBox = new THREE.Box3().setFromObject(modelGroup);
+        console.log('Meshes extraidas del IFC:', meshes.length);
 
-      return {
-        type: 'ifc',
-        meshes,
-        bounds: {
-          min: globalBox.min.clone(),
-          max: globalBox.max.clone(),
-        },
-      };
+        // 4.3 Calculamos la bounding box global para devolver bounds
+        const globalBox = new THREE.Box3().setFromObject(modelGroup);
+
+        return {
+          type: 'ifc',
+          meshes,
+          bounds: {
+            min: globalBox.min.clone(),
+            max: globalBox.max.clone(),
+          },
+        };
+      } catch (error) {
+        console.error('Error detallado al parsear IFC:', error);
+        throw error;
+      }
     },
     [ifcLoader]
   );
