@@ -3,7 +3,7 @@ import React, { useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import * as THREE from 'three';
-import { IfcLoader } from 'web-ifc-three';
+import { IFCLoader } from 'web-ifc-three/IFCLoader';
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
 interface FileUploaderProps {
@@ -24,7 +24,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   //    Sólo se crea una vez con useMemo para no recargar el WASM.
   // ——————————————————————————————————————————————————
   const ifcLoader = useMemo(() => {
-    const loader = new IfcLoader();
+    const loader = new IFCLoader();
     // Indica la ruta al directorio donde sirves web-ifc.wasm
     loader.ifcManager.setWasmPath('/wasm/');
     // Opcional: mejora rendimiento con Web Workers

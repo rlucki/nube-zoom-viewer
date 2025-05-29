@@ -63,6 +63,7 @@
     "three": "^0.160.1",
     "three-ifc": "^0.1.27",
     "vaul": "^0.9.3",
+    "web-ifc-three": "^0.0.126",
     "zod": "^3.23.8"
   },
   "devDependencies": {
