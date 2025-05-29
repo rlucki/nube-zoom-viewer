@@ -111,9 +111,9 @@ export const PointCloud: React.FC<PointCloudProps> = ({
     geometry.computeBoundingSphere();
     
     const material = new THREE.PointsMaterial({
-      size: pointSize,
+      size: pointSize * 0.1, // Reducir significativamente el tamaño
       vertexColors: true,
-      sizeAttenuation: true,
+      sizeAttenuation: false, // Cambiar a false para tamaño consistente
     });
     
     return { geometry, material };

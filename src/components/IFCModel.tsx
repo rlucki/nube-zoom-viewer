@@ -27,10 +27,8 @@ export const IFCModel: React.FC<IFCModelProps> = ({ geometry, transparency }) =>
       groupRef.current!.add(clonedMesh);
     });
 
-    // Center the model only once
-    const box = new THREE.Box3().setFromObject(groupRef.current);
-    const center = box.getCenter(new THREE.Vector3());
-    groupRef.current.position.copy(center.negate());
+    // No aplicar offset automático - dejar el modelo en su posición original
+    // Esto ayuda a que coincida mejor con la nube de puntos
 
   }, [geometry]);
 
@@ -42,13 +40,13 @@ export const IFCModel: React.FC<IFCModelProps> = ({ geometry, transparency }) =>
       if (mesh.material) {
         if (Array.isArray(mesh.material)) {
           mesh.material.forEach(mat => {
-            mat.transparent = true;
+            mat.transparent = transparency < 1;
             mat.opacity = transparency;
             mat.needsUpdate = true;
           });
         } else {
           const material = mesh.material as THREE.Material;
-          material.transparent = true;
+          material.transparent = transparency < 1;
           material.opacity = transparency;
           material.needsUpdate = true;
         }

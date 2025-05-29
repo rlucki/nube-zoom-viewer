@@ -45,6 +45,7 @@ export const PointCloudViewer = () => {
   const [transparency, setTransparency] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [cameraInitialized, setCameraInitialized] = useState(false);
   const controlsRef = useRef<any>(null);
   const { toast } = useToast();
 
@@ -63,9 +64,9 @@ export const PointCloudViewer = () => {
     return allPoints.filter((_, index) => index % step === 0);
   }, [allPoints, density]);
 
-  // Auto-fit camera when new data is loaded
+  // Auto-fit camera only when new files are loaded, not when controls change
   useEffect(() => {
-    if (controlsRef.current && loadedFiles.length > 0) {
+    if (controlsRef.current && loadedFiles.length > 0 && !cameraInitialized) {
       const controls = controlsRef.current;
       
       // Calculate bounds of all data
@@ -91,18 +92,19 @@ export const PointCloudViewer = () => {
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
-        const distance = maxDim * 2;
+        const distance = maxDim * 1.5; // Reducir la distancia para mejor vista
         
         controls.target.copy(center);
         controls.object.position.set(
-          center.x + distance,
-          center.y + distance,
-          center.z + distance
+          center.x + distance * 0.7,
+          center.y + distance * 0.7,
+          center.z + distance * 0.7
         );
         controls.update();
+        setCameraInitialized(true);
       }
     }
-  }, [loadedFiles, allPoints, ifcModels]);
+  }, [loadedFiles.length]); // Solo depende del número de archivos, no de allPoints o ifcModels
 
   const handleFileLoad = useCallback((loadedData: ViewerData, name: string) => {
     const isPointCloud = Array.isArray(loadedData);
@@ -114,6 +116,7 @@ export const PointCloudViewer = () => {
     };
 
     setLoadedFiles(prev => [...prev, newFile]);
+    setCameraInitialized(false); // Reset para que se recalcule la cámara
     
     if (isPointCloud) {
       toast({
@@ -134,6 +137,7 @@ export const PointCloudViewer = () => {
     setPointSize(2);
     setColorMode('rgb');
     setTransparency(1);
+    setCameraInitialized(false);
     
     // Reset camera position
     if (controlsRef.current) {
@@ -222,8 +226,8 @@ export const PointCloudViewer = () => {
         camera={{ 
           position: [10, 10, 10], 
           fov: 60,
-          near: 0.1,
-          far: 10000
+          near: 0.01, // Reducir near plane
+          far: 100000 // Aumentar far plane
         }}
         className="absolute inset-0"
         gl={{ antialias: true, alpha: true }}
@@ -261,8 +265,8 @@ export const PointCloudViewer = () => {
           rotateSpeed={0.5}
           zoomSpeed={1}
           panSpeed={0.8}
-          maxDistance={1000}
-          minDistance={0.1}
+          maxDistance={10000} // Aumentar distancia máxima
+          minDistance={0.01}  // Reducir distancia mínima
         />
 
         {/* Performance Stats */}
