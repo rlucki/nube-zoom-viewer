@@ -3,7 +3,7 @@ import React, { useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import * as THREE from 'three';
-import { IFCLoader } from 'web-ifc-three';
+import { IFCLoader } from 'web-ifc-three';  // ← Import correcto
 
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
@@ -20,24 +20,25 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ——————————————————————
-  // 1) Configuramos IFCLoader
-  // ——————————————————————
+  // ———————————————
+  // 1) Inicializa IFCLoader
+  // ———————————————
   const ifcLoader = useMemo(() => {
     const loader = new IFCLoader();
-    console.log('🟢 web-ifc.wasm → /wasm/web-ifc.wasm');
-    loader.ifcManager.setWasmPath('/wasm/');
+    console.log('🟢 web-ifc.wasm path → /wasm/web-ifc.wasm');
+    loader.ifcManager.setWasmPath('/wasm/');  // debe servir public/wasm/web-ifc.wasm
     return loader;
   }, []);
 
-  // ——————————————————————
+  // ———————————————
   // 2) parsePLY (ASCII)
-  // ——————————————————————
+  // ———————————————
   const parsePLY = useCallback((text: string): Point[] => {
     const lines = text.split('\n');
     let count = 0;
     const pts: Point[] = [];
 
+    // Header
     for (const line of lines) {
       if (line.startsWith('element vertex')) {
         count = parseInt(line.split(' ')[2], 10);
@@ -46,6 +47,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
       }
     }
 
+    // Datos
     const data = lines.slice(lines.indexOf('end_header') + 1);
     for (let i = 0; i < Math.min(count, data.length); i++) {
       const vals = data[i].trim().split(/\s+/).map(Number);
@@ -58,9 +60,9 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     return pts;
   }, []);
 
-  // ——————————————————————
-  // 3) parseLAS (binario LAS/LAZ)
-  // ——————————————————————
+  // ———————————————
+  // 3) parseLAS (binario)
+  // ———————————————
   const parseLAS = useCallback((buffer: ArrayBuffer): Point[] => {
     const view = new DataView(buffer);
     const sig = String.fromCharCode(
@@ -105,18 +107,21 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     return pts;
   }, []);
 
-  // ——————————————————————
+  // ———————————————
   // 4) parseIFC con loadAsync
-  // ——————————————————————
+  // ———————————————
   const parseIFC = useCallback(
     async (buffer: ArrayBuffer): Promise<IFCGeometry> => {
       const blob = new Blob([buffer], { type: 'application/octet-stream' });
       const url  = URL.createObjectURL(blob);
 
       try {
-        const modelGroup = (await ifcLoader.loadAsync(url)) as THREE.Group;
+        // Usa la instancia, no la clase
+        const group = (await ifcLoader.loadAsync(url)) as THREE.Group;
+
+        // Extrae todas las meshes
         const meshes: THREE.Mesh[] = [];
-        modelGroup.traverse(child => {
+        group.traverse((child) => {
           if ((child as THREE.Mesh).isMesh) {
             const m = (child as THREE.Mesh).clone();
             m.geometry.computeBoundingBox();
@@ -124,15 +129,17 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
             meshes.push(m);
           }
         });
-        const box = new THREE.Box3().setFromObject(modelGroup);
+
+        // Bounding box global
+        const box = new THREE.Box3().setFromObject(group);
         return {
           type: 'ifc',
           meshes,
-          bounds: { min: box.min.clone(), max: box.max.clone() },
+          bounds: {
+            min: box.min.clone(),
+            max: box.max.clone(),
+          },
         };
-      } catch (e) {
-        console.error('❌ [parseIFC] Error loadAsync:', e);
-        throw e;
       } finally {
         URL.revokeObjectURL(url);
       }
@@ -140,16 +147,16 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     [ifcLoader]
   );
 
-  // ——————————————————————
-  // 5) handleFileSelect
-  // ——————————————————————
+  // ———————————————
+  // 5) Manejador de archivo
+  // ———————————————
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
       setIsLoading(true);
-
       const name = file.name.toLowerCase();
+
       try {
         if (name.endsWith('.ply')) {
           const txt = await file.text();
