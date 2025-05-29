@@ -1,10 +1,9 @@
-
 // src/components/FileUploader.tsx
 import React, { useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import * as THREE from 'three';
-import { IFCLoader } from 'web-ifc-three';               // ← Fixed: IFCLoader not IfcLoader
+import { IfcLoader } from 'web-ifc-three';              // ← import correcto
 
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
@@ -22,33 +21,33 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // —————————————————————————————————————————————————————————
-  // 1) Inicializamos el IFCLoader apuntando al WASM en public/wasm
+  // 1) Inicializamos el IfcLoader apuntando al WASM en public/wasm
   // —————————————————————————————————————————————————————————
   const ifcLoader = useMemo(() => {
-    const loader = new IFCLoader();                     // ← Fixed: IFCLoader not IfcLoader
+    const loader = new IfcLoader();
     console.log('🟢 web-ifc.wasm path → /wasm/web-ifc.wasm');
-    loader.ifcManager.setWasmPath('/wasm/');            // busca /wasm/web-ifc.wasm
+    loader.ifcManager.setWasmPath('/wasm/');
     return loader;
   }, []);
 
   // —————————————————————————————————————————————————————————
-  // 2) Parseadores de nubes: PLY (ASCII) y LAS/LAZ (binario)
+  // 2) Parseador PLY (ASCII)
   // —————————————————————————————————————————————————————————
   const parsePLY = useCallback((text: string): Point[] => {
     const lines = text.split('\n');
     let vertexCount = 0;
     const points: Point[] = [];
 
-    // Leemos header
+    // Header
     for (const line of lines) {
       if (line.startsWith('element vertex')) {
-        vertexCount = parseInt(line.split(' ')[2]);
+        vertexCount = parseInt(line.split(' ')[2], 10);
       } else if (line.trim() === 'end_header') {
         break;
       }
     }
 
-    // Leemos vértices
+    // Vértices
     const dataLines = lines.slice(lines.indexOf('end_header') + 1);
     for (let i = 0; i < Math.min(vertexCount, dataLines.length); i++) {
       const vals = dataLines[i].trim().split(/\s+/).map(Number);
@@ -58,24 +57,32 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
       }
       points.push(p);
     }
-
     return points;
   }, []);
 
+  // —————————————————————————————————————————————————————————
+  // 3) Parseador LAS/LAZ (binario, muy simplificado)
+  // —————————————————————————————————————————————————————————
   const parseLAS = useCallback((buffer: ArrayBuffer): Point[] => {
     const view = new DataView(buffer);
-    const sig = String.fromCharCode(...[0,1,2,3].map(i => view.getUint8(i)));
+    const sig = String.fromCharCode(
+      view.getUint8(0),
+      view.getUint8(1),
+      view.getUint8(2),
+      view.getUint8(3)
+    );
     if (sig !== 'LASF') throw new Error('No es un LAS válido');
 
-    const pointDataOffset    = view.getUint32(96,  true);
-    const numPoints          = view.getUint32(107, true);
-    const recordLength       = view.getUint16(105,  true);
-    const xScale             = view.getFloat64(131, true);
-    const yScale             = view.getFloat64(139, true);
-    const zScale             = view.getFloat64(147, true);
-    const xOff               = view.getFloat64(155, true);
-    const yOff               = view.getFloat64(163, true);
-    const zOff               = view.getFloat64(171, true);
+    const pointDataOffset = view.getUint32(96, true);
+    const numPoints       = view.getUint32(107, true);
+    const recordLength    = view.getUint16(105, true);
+
+    const xScale = view.getFloat64(131, true);
+    const yScale = view.getFloat64(139, true);
+    const zScale = view.getFloat64(147, true);
+    const xOff   = view.getFloat64(155, true);
+    const yOff   = view.getFloat64(163, true);
+    const zOff   = view.getFloat64(171, true);
 
     const maxPts = Math.min(numPoints, 200_000);
     const points: Point[] = [];
@@ -84,9 +91,9 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
       const offset = pointDataOffset + i * recordLength;
       if (offset + 20 > buffer.byteLength) break;
 
-      const x = view.getInt32(offset,      true) * xScale + xOff;
-      const y = view.getInt32(offset + 4,  true) * yScale + yOff;
-      const z = view.getInt32(offset + 8,  true) * zScale + zOff;
+      const x = view.getInt32(offset,     true) * xScale + xOff;
+      const y = view.getInt32(offset + 4, true) * yScale + yOff;
+      const z = view.getInt32(offset + 8, true) * zScale + zOff;
       const intensity = view.getUint16(offset + 12, true);
 
       let r, g, b;
@@ -98,26 +105,25 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 
       points.push({ x, y, z, intensity, r, g, b });
     }
-
     return points;
   }, []);
 
   // —————————————————————————————————————————————————————————
-  // 3) Parseador IFC real usando loadAsync
+  // 4) Parseador IFC real usando loadAsync()
   // —————————————————————————————————————————————————————————
   const parseIFC = useCallback(
     async (buffer: ArrayBuffer): Promise<IFCGeometry> => {
-      // Creamos un Blob URL para simular carga remota
+      // 1) Blob URL para simular URL externa
       const blob = new Blob([buffer], { type: 'application/octet-stream' });
       const url  = URL.createObjectURL(blob);
 
       try {
-        // loadAsync devolverá un THREE.Group con toda la escena IFC
-        const modelGroup = (await ifcLoader.loadAsync(url)) as THREE.Group;  // ← Fixed: ifcLoader not IFCLoader
+        // 2) Aquí usamos la instancia: ifcLoader.loadAsync, no la clase
+        const modelGroup = (await ifcLoader.loadAsync(url)) as THREE.Group;
 
-        // Extraemos cada Mesh real
+        // 3) Extraemos cada mesh
         const meshes: THREE.Mesh[] = [];
-        modelGroup.traverse(child => {
+        modelGroup.traverse((child) => {
           if ((child as THREE.Mesh).isMesh) {
             const mesh = (child as THREE.Mesh).clone();
             mesh.geometry.computeBoundingBox();
@@ -126,7 +132,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
           }
         });
 
-        // Calculamos la bounding box global
+        // 4) Calculamos bounds
         const boundsBox = new THREE.Box3().setFromObject(modelGroup);
 
         return {
@@ -138,7 +144,6 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
           },
         };
       } finally {
-        // Liberamos el URL
         URL.revokeObjectURL(url);
       }
     },
@@ -146,16 +151,15 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   );
 
   // —————————————————————————————————————————————————————————
-  // 4) Manejador de selección de archivo
+  // 5) Handler: lee el archivo y llama al parseador adecuado
   // —————————————————————————————————————————————————————————
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-
       setIsLoading(true);
-      const name = file.name.toLowerCase();
 
+      const name = file.name.toLowerCase();
       try {
         if (name.endsWith('.ply')) {
           const txt = await file.text();
@@ -171,7 +175,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
           onFileLoad(geom, file.name);
 
         } else {
-          alert('Formato no soportado. Usa .ply, .las, .laz o .ifc');
+          alert('Formato no soportado. Usa .PLY, .LAS, .LAZ o .IFC');
         }
       } catch (err) {
         console.error('🚨 Error cargando archivo:', err);
