@@ -7,7 +7,7 @@ import { IFCLoader } from 'web-ifc-three/IFCLoader';
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
 // Importamos el WASM como URL de módulo para que Vite lo maneje correctamente
-import wasmUrl from 'web-ifc/web-ifc.wasm?url';
+import wasmUrl from 'web-ifc-three/lib/web-ifc.wasm?url';
 
 interface FileUploaderProps {
   onFileLoad: (data: ViewerData, fileName: string) => void;
@@ -29,12 +29,9 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   const ifcLoader = useMemo(() => {
     const loader = new IFCLoader();
     
-    // Configuramos la ruta del WASM usando la URL importada
-    const wasmPath = wasmUrl.substring(0, wasmUrl.lastIndexOf('/') + 1);
-    loader.ifcManager.setWasmPath(wasmPath);
-    
-    console.log('IFC Loader configurado con WASM path:', wasmPath);
-    console.log('WASM URL completa:', wasmUrl);
+    // Configuramos directamente con la URL del WASM
+    console.log('➜ Usando WASM en:', wasmUrl);
+    loader.ifcManager.setWasmPath(wasmUrl);
     
     return loader;
   }, []);
