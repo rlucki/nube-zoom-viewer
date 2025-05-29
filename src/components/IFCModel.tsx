@@ -1,64 +1,87 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { IFCGeometry } from './PointCloudViewer';
 
+/**
+ * Props that the IFCModel component expects.
+ */
 interface IFCModelProps {
-  geometry: IFCGeometry;      // Contiene un array de mallas THREE.Mesh ya cargadas
-  transparency: number;       // Opacidad deseada entre 0 (invisible) y 1 (opaco)
+  /** Geometry container with the raw meshes already created by your loader. */
+  geometry: IFCGeometry;
+  /** Desired opacity (1 = fully opaque, 0 = fully transparent). */
+  transparency: number;
 }
 
-export const IFCModel: React.FC<IFCModelProps> = ({ geometry, transparency }) => {
-  // Referencia al <group> que contendrá todas las mallas del IFC
-  const groupRef = useRef<THREE.Group>(null);
-  // Para poder actualizar la transparencia sin volver a clonar todo
+/**
+ * Displays an IFC model by cloning its meshes into a single <group>
+ * and automatically recentring the whole model at the origin.
+ */
+export const IFCModel: React.FC<IFCModelProps> = ({
+  geometry,
+  transparency,
+}) => {
+  /** <group> that will hold every mesh clone. */
+  const groupRef  = useRef<THREE.Group>(null);
+  /** Array for quick access when updating material opacity. */
   const meshesRef = useRef<THREE.Mesh[]>([]);
 
-  // ——— Montaje inicial de las mallas (solo cuando cambia `geometry`) ———
+  /* ---------- 1. Clone meshes the first time geometry arrives ---------- */
   useEffect(() => {
     if (!groupRef.current || !geometry.meshes) return;
 
-    // 1) Limpia cualquier malla previa
+    /* Remove anything that might already be in this group. */
     groupRef.current.clear();
     meshesRef.current = [];
 
-    // 2) Clona e inserta cada mesh del IFC dentro del grupo
-    geometry.meshes.forEach(mesh => {
-      const clonedMesh = mesh.clone();
-      meshesRef.current.push(clonedMesh);
-      groupRef.current!.add(clonedMesh);
+    /* Clone every mesh so we can freely reposition without touching the loader-owned originals. */
+    geometry.meshes.forEach((sourceMesh) => {
+      const meshClone = sourceMesh.clone();
+      meshesRef.current.push(meshClone);
+      groupRef.current!.add(meshClone);
     });
 
-    // ✋ Aquí NO se aplica ningún center() ni ningún scale.set(...)
-    //    Se deja en “coordenadas originales” para que cuadre con la nube.
+    /* ---------- 2. Build one Box3 that encloses the entire model ---------- */
+    const globalBox = new THREE.Box3();
+    meshesRef.current.forEach((mesh) => {
+      mesh.geometry.computeBoundingBox();          // make sure each mesh has a bounding box
+      if (mesh.geometry.boundingBox) {
+        globalBox.union(mesh.geometry.boundingBox);
+      }
+    });
 
+    /* ---------- 3. Move the whole group so its centre becomes (0, 0, 0) ---------- */
+    const centre = new THREE.Vector3();
+    globalBox.getCenter(centre);
+    groupRef.current.position.set(-centre.x, -centre.y, -centre.z);
+
+    /* Optional: uniform scaling so IFC in millimetres matches point cloud in metres.
+       Example (1/1000 => mm → m):
+       const size = new THREE.Vector3();
+       globalBox.getSize(size);
+       const unitScale = 1 / 1000;
+       groupRef.current.scale.set(unitScale, unitScale, unitScale);
+    */
   }, [geometry]);
 
-
-  // ——— Actualización de la transparencia ———
-  // Así evitamos recrear/clonar todas las mallas cada vez
+  /* ---------- 4. Update transparency every time the slider changes ---------- */
   useEffect(() => {
-    if (!meshesRef.current.length) return;
+    meshesRef.current.forEach((mesh) => {
+      const applyOpacity = (material: THREE.Material): void => {
+        // @ts-ignore — all MeshBasic / Standard / Lambert etc. share these props
+        material.transparent = transparency < 1;
+        // @ts-ignore
+        material.opacity = transparency;
+        material.needsUpdate = true;
+      };
 
-    meshesRef.current.forEach(mesh => {
-      if (mesh.material) {
-        // Si hay varios materiales (material por lado), lo ajustamos en cada uno
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach(mat => {
-            mat.transparent = transparency < 1;
-            mat.opacity = transparency;
-            mat.needsUpdate = true;
-          });
-        } else {
-          const mat = mesh.material as THREE.Material;
-          mat.transparent = transparency < 1;
-          mat.opacity = transparency;
-          mat.needsUpdate = true;
-        }
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach(applyOpacity);
+      } else {
+        applyOpacity(mesh.material as THREE.Material);
       }
     });
   }, [transparency]);
 
-
-  // ——— Renderizamos un <group> vacío: las mallas se meten en él por el useEffect ———
+  /* ---------- 5. Render only the group (meshes are inside). ---------- */
   return <group ref={groupRef} />;
 };
