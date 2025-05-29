@@ -112,7 +112,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 
       try {
         // loadAsync devolverá un THREE.Group con toda la escena IFC
-        const modelGroup = (await ifcLoader.loadAsync(url)) as THREE.Group;
+        const modelGroup = (await IFCLoader.loadAsync(url)) as THREE.Group;
 
         // Extraemos cada Mesh real
         const meshes: THREE.Mesh[] = [];
