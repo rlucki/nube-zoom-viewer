@@ -1,3 +1,4 @@
+
 import React, { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { Point } from './PointCloudViewer';
