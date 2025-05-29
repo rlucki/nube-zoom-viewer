@@ -1,9 +1,10 @@
+
 // src/components/FileUploader.tsx
 import React, { useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import * as THREE from 'three';
-import { IfcLoader } from 'web-ifc-three';               // ← Aquí el nombre correcto
+import { IFCLoader } from 'web-ifc-three';               // ← Fixed: IFCLoader not IfcLoader
 
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
@@ -21,10 +22,10 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // —————————————————————————————————————————————————————————
-  // 1) Inicializamos el IfcLoader apuntando al WASM en public/wasm
+  // 1) Inicializamos el IFCLoader apuntando al WASM en public/wasm
   // —————————————————————————————————————————————————————————
   const ifcLoader = useMemo(() => {
-    const loader = new IfcLoader();
+    const loader = new IFCLoader();                     // ← Fixed: IFCLoader not IfcLoader
     console.log('🟢 web-ifc.wasm path → /wasm/web-ifc.wasm');
     loader.ifcManager.setWasmPath('/wasm/');            // busca /wasm/web-ifc.wasm
     return loader;
@@ -112,7 +113,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 
       try {
         // loadAsync devolverá un THREE.Group con toda la escena IFC
-        const modelGroup = (await IFCLoader.loadAsync(url)) as THREE.Group;
+        const modelGroup = (await ifcLoader.loadAsync(url)) as THREE.Group;  // ← Fixed: ifcLoader not IFCLoader
 
         // Extraemos cada Mesh real
         const meshes: THREE.Mesh[] = [];
