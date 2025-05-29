@@ -1,3 +1,4 @@
+
 // src/components/FileUploader.tsx
 import React, { useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
@@ -105,31 +106,36 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
       const blob = new Blob([buffer], { type: 'application/octet-stream' });
       const url  = URL.createObjectURL(blob);
 
-      // Cargamos con loadAsync en lugar de parse (más robusto)
-      const modelGroup: THREE.Group = await ifcLoader.loadAsync(url);
+      try {
+        // Cargamos con loadAsync y aseguramos que retorna un THREE.Group
+        const modelGroup = await ifcLoader.loadAsync(url) as THREE.Group;
 
-      // Extraemos todas las meshes reales del IFC
-      const meshes: THREE.Mesh[] = [];
-      modelGroup.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mesh = (child as THREE.Mesh).clone();
-          mesh.geometry.computeBoundingBox();
-          mesh.frustumCulled = false;
-          meshes.push(mesh);
-        }
-      });
+        // Extraemos todas las meshes reales del IFC
+        const meshes: THREE.Mesh[] = [];
+        modelGroup.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = (child as THREE.Mesh).clone();
+            mesh.geometry.computeBoundingBox();
+            mesh.frustumCulled = false;
+            meshes.push(mesh);
+          }
+        });
 
-      // Calculamos la caja envolvente global para retornarla
-      const boundsBox = new THREE.Box3().setFromObject(modelGroup);
+        // Calculamos la caja envolvente global para retornarla
+        const boundsBox = new THREE.Box3().setFromObject(modelGroup);
 
-      return {
-        type: 'ifc',
-        meshes,
-        bounds: {
-          min: boundsBox.min.clone(),
-          max: boundsBox.max.clone(),
-        },
-      };
+        return {
+          type: 'ifc',
+          meshes,
+          bounds: {
+            min: boundsBox.min.clone(),
+            max: boundsBox.max.clone(),
+          },
+        };
+      } finally {
+        // Limpiamos el URL del blob
+        URL.revokeObjectURL(url);
+      }
     },
     [ifcLoader]
   );
