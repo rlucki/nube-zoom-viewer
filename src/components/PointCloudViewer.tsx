@@ -1,142 +1,218 @@
-import React, { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber'; // Hook para ejecutar código cada frame (no usado aquí, podrías retirarlo)
+import React, {
+  useState,
+  useRef,
+  useMemo,
+  useCallback,
+  useEffect,
+} from 'react';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, Stats } from '@react-three/drei';
 import * as THREE from 'three';
-import type { Point } from './PointCloudViewer';
+import { FileUploader } from './FileUploader';
+import { ViewerControls } from './ViewerControls';
+import { PointCloud } from './PointCloud';
+import { IFCModel } from './IFCModel';
+import { useToast } from '@/hooks/use-toast';
 
-interface PointCloudProps {
-  points: Point[];                 // Array de puntos a dibujar
-  pointSize: number;               // Tamaño base de cada punto
-  colorMode: 'rgb' | 'intensity' | 'height'; // Modo de color
+/* -------------------------------------------------------------------------- */
+/*  Tipos                                                                    */
+/* -------------------------------------------------------------------------- */
+export interface Point {
+  x: number;
+  y: number;
+  z: number;
+  r?: number;
+  g?: number;
+  b?: number;
+  intensity?: number;
 }
 
-export const PointCloud: React.FC<PointCloudProps> = ({ 
-  points, 
-  pointSize, 
-  colorMode 
-}) => {
-  // Referencia al objeto THREE.Points para, por ejemplo, actualizarlo dinámicamente
-  const meshRef = useRef<THREE.Points>(null);
+export interface IFCGeometry {
+  type: 'ifc';
+  meshes: THREE.Mesh[];
+  bounds: {
+    min: THREE.Vector3;
+    max: THREE.Vector3;
+  };
+}
 
-  // useMemo memoriza la geometría y el material para no recrearlos en cada render
-  const { geometry, material } = useMemo(() => {
-    const geometry = new THREE.BufferGeometry();
+export type ViewerData = Point[] | IFCGeometry;
 
-    // Creamos arrays Float32 para posiciones y colores (r,g,b) de todos los puntos
-    const positions = new Float32Array(points.length * 3);
-    const colors    = new Float32Array(points.length * 3);
+interface LoadedFile {
+  id: string;
+  name: string;
+  type: 'pointcloud' | 'ifc';
+  data: ViewerData;
+}
 
-    // Variables para determinar rangos de Z e intensidad (para normalizar)
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-    let minIntensity = Infinity;
-    let maxIntensity = -Infinity;
+export const PointCloudViewer: React.FC = () => {
+  /* -------------------------------------------------------------------------- */
+  /*  Estados                                                                    */
+  /* -------------------------------------------------------------------------- */
+  const [loadedFiles, setLoadedFiles] = useState<LoadedFile[]>([]);
+  const [density, setDensity] = useState(0.1);
+  const [pointSize, setPointSize] = useState(2);
+  const [colorMode, setColorMode] = useState<'rgb' | 'intensity' | 'height'>('rgb');
+  const [transparency, setTransparency] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const { toast } = useToast();
+  const controlsRef = useRef<any>(null);
 
-    // Primer pase: calcular los valores mínimos y máximos de altura (Z) e intensidad
-    points.forEach(point => {
-      minZ = Math.min(minZ, point.z);
-      maxZ = Math.max(maxZ, point.z);
-      if (point.intensity !== undefined) {
-        minIntensity = Math.min(minIntensity, point.intensity);
-        maxIntensity = Math.max(maxIntensity, point.intensity);
-      }
+  /* -------------------------------------------------------------------------- */
+  /*  Memorización de datos                                                      */
+  /* -------------------------------------------------------------------------- */
+  // Muestra un mensaje de bienvenida al cargar la página
+  useEffect(() => {
+    toast({
+      title: "¡Bienvenido!",
+      description: "Carga un archivo .PLY, .LAS o .IFC para comenzar",
     });
+  }, [toast]);
 
-    // Segundo pase: rellenar arrays de posiciones y colores
-    points.forEach((point, i) => {
-      const i3 = i * 3; // índice base en los arrays
+  // Recalcula los puntos filtrados según la densidad
+  const sampledPoints = useMemo(() => {
+    const pointCloudFiles = loadedFiles.filter(file => file.type === 'pointcloud');
+    if (pointCloudFiles.length === 0) return [];
+    
+    const allPoints = pointCloudFiles.flatMap(file => file.data as Point[]);
+    const sampleSize = Math.ceil(allPoints.length * density);
+    const step = Math.max(1, Math.floor(allPoints.length / sampleSize));
+    
+    return allPoints.filter((_, index) => index % step === 0);
+  }, [loadedFiles, density]);
 
-      // ––––––––––––––––––––––––
-      // 1) Posiciones XYZ
-      positions[i3    ] = point.x;
-      positions[i3 + 1] = point.y;
-      positions[i3 + 2] = point.z;
+  const ifcModels = useMemo(() => {
+    return loadedFiles.filter(file => file.type === 'ifc');
+  }, [loadedFiles]);
 
-      // ––––––––––––––––––––––––
-      // 2) Selección de color según el modo elegido
-      let r = 1, g = 1, b = 1; // valores por defecto
+  /* -------------------------------------------------------------------------- */
+  /*  Funciones de carga y limpieza de datos                                    */
+  /* -------------------------------------------------------------------------- */
+  const handleFileLoad = useCallback((data: ViewerData, fileName: string) => {
+    const newFile: LoadedFile = {
+      id: Date.now().toString(),
+      name: fileName,
+      type: Array.isArray(data) ? 'pointcloud' : 'ifc',
+      data
+    };
 
-      switch (colorMode) {
-        case 'rgb':
-          // Si el punto trae colores RGB, los normalizamos a [0,1]
-          if (point.r !== undefined && point.g !== undefined && point.b !== undefined) {
-            r = point.r / 255;
-            g = point.g / 255;
-            b = point.b / 255;
-          } else {
-            // Si no trae color, usamos un gris claro
-            r = g = b = 0.8;
-          }
-          break;
-
-        case 'intensity':
-          // Mapa de calor basado en intensidad; necesita rango válido
-          if (point.intensity !== undefined && maxIntensity > minIntensity) {
-            const normalized = (point.intensity - minIntensity) / (maxIntensity - minIntensity);
-            // Divide el espectro en 4 rangos para un gradiente de color
-            if (normalized < 0.25) {
-              r = 0;
-              g = normalized * 4;
-              b = 1;
-            } else if (normalized < 0.5) {
-              r = 0;
-              g = 1;
-              b = 1 - (normalized - 0.25) * 4;
-            } else if (normalized < 0.75) {
-              r = (normalized - 0.5) * 4;
-              g = 1;
-              b = 0;
-            } else {
-              r = 1;
-              g = 1 - (normalized - 0.75) * 4;
-              b = 0;
-            }
-          } else {
-            // Intensidad no válida → color neutro
-            r = g = b = 0.8;
-          }
-          break;
-
-        case 'height':
-          // Mapa de color desde azul (bajo) a rojo (alto) según altura
-          if (maxZ > minZ) {
-            const normalized = (point.z - minZ) / (maxZ - minZ);
-            r = normalized;                                  // crece con la altura
-            g = 1 - Math.abs(normalized - 0.5) * 2;          // pico en la mitad
-            b = 1 - normalized;                              // decrece con la altura
-          } else {
-            r = g = b = 0.8; // sin rango de alturas
-          }
-          break;
-      }
-
-      // Asignamos colores al array
-      colors[i3    ] = r;
-      colors[i3 + 1] = g;
-      colors[i3 + 2] = b;
+    setLoadedFiles(prev => [...prev, newFile]);
+    
+    toast({
+      title: "Archivo cargado",
+      description: `${fileName} se ha cargado correctamente`,
     });
+  }, [toast]);
 
-    // Añadimos atributos al BufferGeometry
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
-    geometry.computeBoundingSphere(); // necesario para frustum culling y controles
-
-    // Creamos el material de puntos
-    const material = new THREE.PointsMaterial({
-      size: pointSize * 0.1,   // ajusta el tamaño real: aquí lo escalamos a 1/10
-      vertexColors: true,      // usa los colores definidos por vértice
-      sizeAttenuation: false,  // false = mismo tamaño en pantalla sin importar la distancia
+  const handleClear = useCallback(() => {
+    setLoadedFiles([]);
+    toast({
+      title: "Datos limpiados",
+      description: "Todos los archivos han sido eliminados",
     });
+  }, [toast]);
 
-    return { geometry, material };
-  }, [points, pointSize, colorMode]); // se recalcula solo si cambian estos props
+  const resetCamera = useCallback(() => {
+    if (controlsRef.current) {
+      controlsRef.current.reset();
+    }
+  }, []);
 
-  // Devolvemos el mesh de puntos; frustumCulled=false desactiva recorte automático
+  /* -------------------------------------------------------------------------- */
+  /*  Renderizado                                                                */
+  /* -------------------------------------------------------------------------- */
   return (
-    <points
-      ref={meshRef}
-      geometry={geometry}
-      material={material}
-      frustumCulled={false} // opcional: fuerza a siempre renderizar la nube completa
-    />
+    <div className="w-full h-screen bg-gray-900 relative">
+      <div className="absolute top-4 left-4 z-20 flex items-center gap-4">
+        <h1 className="text-2xl font-bold text-white">Visor de Nubes de Puntos</h1>
+        <FileUploader 
+          onFileLoad={handleFileLoad}
+          setIsLoading={setIsLoading}
+          isLoading={isLoading}
+        />
+        {loadedFiles.length > 0 && (
+          <button
+            onClick={handleClear}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+          >
+            Limpiar
+          </button>
+        )}
+        <button
+          onClick={resetCamera}
+          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+        >
+          Reset Cámara
+        </button>
+      </div>
+
+      <ViewerControls
+        density={density}
+        setDensity={setDensity}
+        pointSize={pointSize}
+        setPointSize={setPointSize}
+        colorMode={colorMode}
+        setColorMode={setColorMode}
+        transparency={transparency}
+        setTransparency={setTransparency}
+        totalCount={loadedFiles.filter(f => f.type === 'pointcloud').reduce((acc, file) => acc + (file.data as Point[]).length, 0)}
+        visibleCount={sampledPoints.length}
+        isVisible={controlsVisible}
+        onToggleVisibility={() => setControlsVisible(!controlsVisible)}
+        isPointCloud={sampledPoints.length > 0}
+        hasIFCModel={ifcModels.length > 0}
+      />
+
+      {isLoading && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-30">
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-center">Cargando archivo...</p>
+          </div>
+        </div>
+      )}
+
+      <Canvas
+        camera={{ position: [50, 50, 50], fov: 60, near: 0.01, far: 100000 }}
+        className="absolute inset-0"
+        gl={{ antialias: true, alpha: true }}
+      >
+        <color attach="background" args={['#1a1a1a']} />
+        
+        <ambientLight intensity={0.4} />
+        <directionalLight position={[10, 10, 5]} intensity={0.8} />
+        <directionalLight position={[-10, -10, -5]} intensity={0.3} />
+
+        {sampledPoints.length > 0 && (
+          <PointCloud
+            points={sampledPoints}
+            pointSize={pointSize}
+            colorMode={colorMode}
+          />
+        )}
+
+        {ifcModels.map((file) => (
+          <IFCModel
+            key={file.id}
+            geometry={file.data as IFCGeometry}
+            transparency={transparency}
+          />
+        ))}
+
+        <OrbitControls 
+          ref={controlsRef}
+          enablePan={true}
+          enableZoom={true}
+          enableRotate={true}
+          zoomSpeed={0.6}
+          panSpeed={0.8}
+          rotateSpeed={0.4}
+        />
+        <Stats />
+        <axesHelper args={[10]} />
+        <gridHelper args={[100, 100]} />
+      </Canvas>
+    </div>
   );
 };
