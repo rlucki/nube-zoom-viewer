@@ -212,29 +212,36 @@ export const PointCloudViewer: React.FC = () => {
       setSelectedObject(null);
       setSectionBounds(null);
       
-      // Remove clipping planes when deactivating
-      if (selectedObject) {
-        selectedObject.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach(mat => {
-                mat.clippingPlanes = [];
-                mat.needsUpdate = true;
-              });
-            } else {
-              child.material.clippingPlanes = [];
-              child.material.needsUpdate = true;
+      // Remove clipping planes from all objects when deactivating
+      loadedFiles.forEach(file => {
+        if (file.type === 'pointcloud') {
+          // Remove clipping from point clouds
+          const pointCloudObjects = [];
+          // Point clouds are handled in PointCloud component
+        } else if (file.type === 'ifc') {
+          const ifcGeometry = file.data as IFCGeometry;
+          ifcGeometry.meshes.forEach(mesh => {
+            if (mesh.material) {
+              if (Array.isArray(mesh.material)) {
+                mesh.material.forEach(mat => {
+                  mat.clippingPlanes = [];
+                  mat.needsUpdate = true;
+                });
+              } else {
+                mesh.material.clippingPlanes = [];
+                mesh.material.needsUpdate = true;
+              }
             }
-          }
-        });
-      }
+          });
+        }
+      });
     }
     
     toast({
       title: active ? "Herramienta de sección activada" : "Herramienta de sección desactivada",
       description: active ? "Haz clic en un modelo para seleccionarlo" : "Planos de corte eliminados",
     });
-  }, [selectedObject, toast]);
+  }, [loadedFiles, toast]);
 
   /* -------------------------------------------------------------------------- */
   /*  Scene component to ensure proper initialization order                      */
@@ -264,9 +271,9 @@ export const PointCloudViewer: React.FC = () => {
           />
         ))}
 
-        {/* Object Selector for hover/selection effects */}
+        {/* Object Selector for hover/selection effects - ALWAYS active when section tool is active */}
         <ObjectSelector
-          isActive={sectionBoxActive}
+          isActive={sectionBoxActive || measurementActive}
           onObjectHover={handleObjectHover}
           onObjectSelect={handleObjectSelection}
         />
@@ -289,9 +296,9 @@ export const PointCloudViewer: React.FC = () => {
 
         <OrbitControls 
           ref={controlsRef}
-          enablePan={true}
-          enableZoom={true}
-          enableRotate={true}
+          enablePan={!dragState.current.isDragging}
+          enableZoom={!dragState.current.isDragging}
+          enableRotate={!dragState.current.isDragging}
           zoomSpeed={0.6}
           panSpeed={0.8}
           rotateSpeed={0.4}

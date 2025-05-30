@@ -24,42 +24,107 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   const [hoveredHandle, setHoveredHandle] = useState<string | null>(null);
 
   const boxRef = useRef<THREE.Group>(null);
-  const { camera, gl, raycaster } = useThree();
-  const localRaycaster = useRef(new THREE.Raycaster());
-  const localMouse = useRef(new THREE.Vector2());
+  const { camera, gl, raycaster, scene } = useThree();
 
   // Calculate bounding box for target object
   useEffect(() => {
     if (targetObject && isActive) {
       const box = new THREE.Box3().setFromObject(targetObject);
       
-      // Expandir un poco el cubo para que sea visible
-      const size = box.getSize(new THREE.Vector3());
-      const expansion = Math.max(size.x, size.y, size.z) * 0.05;
-      box.expandByScalar(expansion);
-      
-      setBounds({
-        min: box.min.clone(),
-        max: box.max.clone(),
-      });
+      if (box.isEmpty()) {
+        // If box is empty, set a default size
+        const center = new THREE.Vector3(0, 0, 0);
+        const size = 10;
+        setBounds({
+          min: new THREE.Vector3(center.x - size, center.y - size, center.z - size),
+          max: new THREE.Vector3(center.x + size, center.y + size, center.z + size),
+        });
+      } else {
+        // Expandir un poco el cubo para que sea visible
+        const size = box.getSize(new THREE.Vector3());
+        const expansion = Math.max(size.x, size.y, size.z) * 0.05;
+        box.expandByScalar(expansion);
+        
+        setBounds({
+          min: box.min.clone(),
+          max: box.max.clone(),
+        });
+      }
     } else if (!isActive) {
       setBounds(null);
     }
   }, [targetObject, isActive]);
 
+  // Update clipping planes when bounds change
+  useEffect(() => {
+    if (bounds && targetObject) {
+      const clippingPlanes = [
+        new THREE.Plane(new THREE.Vector3(1, 0, 0), -bounds.min.x),
+        new THREE.Plane(new THREE.Vector3(-1, 0, 0), bounds.max.x),
+        new THREE.Plane(new THREE.Vector3(0, 1, 0), -bounds.min.y),
+        new THREE.Plane(new THREE.Vector3(0, -1, 0), bounds.max.y),
+        new THREE.Plane(new THREE.Vector3(0, 0, 1), -bounds.min.z),
+        new THREE.Plane(new THREE.Vector3(0, 0, -1), bounds.max.z),
+      ];
+
+      // Apply clipping planes to the target object
+      targetObject.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(mat => {
+              mat.clippingPlanes = clippingPlanes;
+              mat.needsUpdate = true;
+            });
+          } else {
+            child.material.clippingPlanes = clippingPlanes;
+            child.material.needsUpdate = true;
+          }
+        } else if (child instanceof THREE.Points && child.material) {
+          child.material.clippingPlanes = clippingPlanes;
+          child.material.needsUpdate = true;
+        }
+      });
+
+      onSectionChange?.(bounds);
+    } else if (!bounds && targetObject) {
+      // Remove clipping planes
+      targetObject.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(mat => {
+              mat.clippingPlanes = [];
+              mat.needsUpdate = true;
+            });
+          } else {
+            child.material.clippingPlanes = [];
+            child.material.needsUpdate = true;
+          }
+        } else if (child instanceof THREE.Points && child.material) {
+          child.material.clippingPlanes = [];
+          child.material.needsUpdate = true;
+        }
+      });
+    }
+  }, [bounds, targetObject, onSectionChange]);
+
+  const getMousePosition = (event: MouseEvent) => {
+    const rect = gl.domElement.getBoundingClientRect();
+    return new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+  };
+
   const handleMouseDown = (event: MouseEvent) => {
     if (!isActive || !bounds) return;
 
-    const rect = gl.domElement.getBoundingClientRect();
-    localMouse.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    localMouse.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    localRaycaster.current.setFromCamera(localMouse.current, camera);
+    const mouse = getMousePosition(event);
+    raycaster.setFromCamera(mouse, camera);
     
     // Check intersection with section box handles
     const boxGroup = boxRef.current;
     if (boxGroup) {
-      const intersects = localRaycaster.current.intersectObjects(boxGroup.children, true);
+      const intersects = raycaster.intersectObjects(boxGroup.children, true);
       if (intersects.length > 0) {
         const intersectedObject = intersects[0].object;
         const face = intersectedObject.userData.face;
@@ -74,6 +139,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
               max: bounds.max.clone()
             }
           });
+          event.preventDefault();
           event.stopPropagation();
         }
       }
@@ -83,16 +149,14 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   const handleMouseMove = (event: MouseEvent) => {
     if (!isActive) return;
 
-    const rect = gl.domElement.getBoundingClientRect();
-    localMouse.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    localMouse.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    const mouse = getMousePosition(event);
 
     // Handle hover effects
     if (!dragState.isDragging && bounds) {
-      localRaycaster.current.setFromCamera(localMouse.current, camera);
+      raycaster.setFromCamera(mouse, camera);
       const boxGroup = boxRef.current;
       if (boxGroup) {
-        const intersects = localRaycaster.current.intersectObjects(boxGroup.children, true);
+        const intersects = raycaster.intersectObjects(boxGroup.children, true);
         if (intersects.length > 0) {
           const face = intersects[0].object.userData.face;
           setHoveredHandle(face);
@@ -107,7 +171,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     // Handle dragging
     if (!dragState.isDragging || !bounds || !dragState.face || !dragState.startPoint || !dragState.startBounds) return;
 
-    localRaycaster.current.setFromCamera(localMouse.current, camera);
+    raycaster.setFromCamera(mouse, camera);
     
     // Calculate movement based on face orientation
     const plane = new THREE.Plane();
@@ -131,7 +195,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
 
     plane.setFromNormalAndCoplanarPoint(normal, dragState.startPoint);
-    const intersectionPoint = localRaycaster.current.ray.intersectPlane(plane, worldPosition);
+    const intersectionPoint = raycaster.ray.intersectPlane(plane, worldPosition);
     
     if (!intersectionPoint) return;
 
@@ -174,7 +238,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
 
     setBounds(newBounds);
-    onSectionChange?.(newBounds);
   };
 
   const handleMouseUp = () => {
@@ -186,17 +249,18 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
 
   useEffect(() => {
     if (isActive) {
-      gl.domElement.addEventListener('mousedown', handleMouseDown);
-      gl.domElement.addEventListener('mousemove', handleMouseMove);
-      gl.domElement.addEventListener('mouseup', handleMouseUp);
-    }
+      const canvas = gl.domElement;
+      canvas.addEventListener('mousedown', handleMouseDown);
+      canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('mouseup', handleMouseUp);
 
-    return () => {
-      gl.domElement.removeEventListener('mousedown', handleMouseDown);
-      gl.domElement.removeEventListener('mousemove', handleMouseMove);
-      gl.domElement.removeEventListener('mouseup', handleMouseUp);
-      gl.domElement.style.cursor = 'default';
-    };
+      return () => {
+        canvas.removeEventListener('mousedown', handleMouseDown);
+        canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('mouseup', handleMouseUp);
+        canvas.style.cursor = 'default';
+      };
+    }
   }, [isActive, dragState, bounds]);
 
   if (!bounds || !isActive) return null;
@@ -238,7 +302,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
           >
             {/* Triangular handle */}
             <mesh userData={{ face: handle.face }}>
-              <coneGeometry args={[0.5, 1.0, 4]} />
+              <coneGeometry args={[0.8, 1.5, 4]} />
               <meshBasicMaterial 
                 color={isDragging ? "#FF0000" : (isHovered ? "#FFA500" : "#0066FF")} 
                 transparent 
@@ -246,8 +310,8 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
               />
             </mesh>
             {/* Handle shaft for better visibility */}
-            <mesh position={[0, 0.6, 0]} userData={{ face: handle.face }}>
-              <cylinderGeometry args={[0.1, 0.1, 1.2]} />
+            <mesh position={[0, 0.9, 0]} userData={{ face: handle.face }}>
+              <cylinderGeometry args={[0.15, 0.15, 1.8]} />
               <meshBasicMaterial 
                 color={isDragging ? "#FF0000" : (isHovered ? "#FFA500" : "#0066FF")} 
                 transparent 
