@@ -237,6 +237,73 @@ export const PointCloudViewer: React.FC = () => {
   }, [selectedObject, toast]);
 
   /* -------------------------------------------------------------------------- */
+  /*  Scene component to ensure proper initialization order                      */
+  /* -------------------------------------------------------------------------- */
+  const Scene = () => {
+    return (
+      <>
+        <color attach="background" args={['#1a1a1a']} />
+        
+        <ambientLight intensity={0.4} />
+        <directionalLight position={[10, 10, 5]} intensity={0.8} />
+        <directionalLight position={[-10, -10, -5]} intensity={0.3} />
+
+        {sampledPoints.length > 0 && (
+          <PointCloud
+            points={sampledPoints}
+            pointSize={pointSize}
+            colorMode={colorMode}
+          />
+        )}
+
+        {ifcModels.map((file) => (
+          <IFCModel
+            key={file.id}
+            geometry={file.data as IFCGeometry}
+            transparency={transparency}
+          />
+        ))}
+
+        {/* Object Selector for hover/selection effects */}
+        <ObjectSelector
+          isActive={sectionBoxActive}
+          onObjectHover={handleObjectHover}
+          onObjectSelect={handleObjectSelection}
+        />
+
+        {/* Measurement Tool */}
+        <MeasurementTool
+          isActive={measurementActive}
+          snapMode={snapMode}
+          orthoMode={orthoMode}
+          onMeasure={handleMeasurement}
+          onSnapModeChange={handleSnapModeChange}
+        />
+
+        {/* Section Box */}
+        <SectionBox
+          targetObject={selectedObject}
+          isActive={sectionBoxActive}
+          onSectionChange={handleSectionChange}
+        />
+
+        <OrbitControls 
+          ref={controlsRef}
+          enablePan={true}
+          enableZoom={true}
+          enableRotate={true}
+          zoomSpeed={0.6}
+          panSpeed={0.8}
+          rotateSpeed={0.4}
+        />
+        <Stats />
+        <axesHelper args={[10]} />
+        <gridHelper args={[100, 100]} />
+      </>
+    );
+  };
+
+  /* -------------------------------------------------------------------------- */
   /*  Renderizado                                                                */
   /* -------------------------------------------------------------------------- */
   return (
@@ -308,63 +375,7 @@ export const PointCloudViewer: React.FC = () => {
         className="absolute inset-0"
         gl={{ antialias: true, alpha: true, localClippingEnabled: true }}
       >
-        <color attach="background" args={['#1a1a1a']} />
-        
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[10, 10, 5]} intensity={0.8} />
-        <directionalLight position={[-10, -10, -5]} intensity={0.3} />
-
-        {sampledPoints.length > 0 && (
-          <PointCloud
-            points={sampledPoints}
-            pointSize={pointSize}
-            colorMode={colorMode}
-          />
-        )}
-
-        {ifcModels.map((file) => (
-          <IFCModel
-            key={file.id}
-            geometry={file.data as IFCGeometry}
-            transparency={transparency}
-          />
-        ))}
-
-        {/* Object Selector for hover/selection effects */}
-        <ObjectSelector
-          isActive={sectionBoxActive}
-          onObjectHover={handleObjectHover}
-          onObjectSelect={handleObjectSelection}
-        />
-
-        {/* Measurement Tool */}
-        <MeasurementTool
-          isActive={measurementActive}
-          snapMode={snapMode}
-          orthoMode={orthoMode}
-          onMeasure={handleMeasurement}
-          onSnapModeChange={handleSnapModeChange}
-        />
-
-        {/* Section Box */}
-        <SectionBox
-          targetObject={selectedObject}
-          isActive={sectionBoxActive}
-          onSectionChange={handleSectionChange}
-        />
-
-        <OrbitControls 
-          ref={controlsRef}
-          enablePan={true}
-          enableZoom={true}
-          enableRotate={true}
-          zoomSpeed={0.6}
-          panSpeed={0.8}
-          rotateSpeed={0.4}
-        />
-        <Stats />
-        <axesHelper args={[10]} />
-        <gridHelper args={[100, 100]} />
+        <Scene />
       </Canvas>
     </div>
   );
