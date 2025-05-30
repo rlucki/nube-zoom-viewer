@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
@@ -7,6 +7,7 @@ import { Html } from '@react-three/drei';
 interface MeasurementPoint {
   position: THREE.Vector3;
   id: string;
+  objectHit?: THREE.Object3D;
 }
 
 interface MeasurementToolProps {
@@ -14,6 +15,7 @@ interface MeasurementToolProps {
   snapMode: 'none' | 'vertex' | 'edge' | 'face';
   orthoMode: 'none' | 'x' | 'y' | 'z';
   onMeasure?: (distance: number, points: [THREE.Vector3, THREE.Vector3]) => void;
+  onSnapModeChange?: (mode: 'none' | 'vertex' | 'edge' | 'face') => void;
 }
 
 export const MeasurementTool: React.FC<MeasurementToolProps> = ({
@@ -21,25 +23,93 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
   snapMode,
   orthoMode,
   onMeasure,
+  onSnapModeChange,
 }) => {
   const [points, setPoints] = useState<MeasurementPoint[]>([]);
   const [currentPoint, setCurrentPoint] = useState<THREE.Vector3 | null>(null);
+  const [currentDistance, setCurrentDistance] = useState<number>(0);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [highlightedObject, setHighlightedObject] = useState<THREE.Object3D | null>(null);
+  const [originalMaterial, setOriginalMaterial] = useState<THREE.Material | null>(null);
   const { camera, scene, gl } = useThree();
   const raycaster = useRef(new THREE.Raycaster());
   const mouse = useRef(new THREE.Vector2());
 
+  // Filter only 3D model objects, excluding grid, axes, and UI elements
+  const getModelObjects = useCallback(() => {
+    const modelObjects: THREE.Object3D[] = [];
+    scene.traverse((child) => {
+      if (child.type === 'Mesh' && 
+          child.name !== 'grid' && 
+          child.name !== 'axes' &&
+          child.parent?.name !== 'grid' &&
+          child.parent?.name !== 'axes') {
+        modelObjects.push(child);
+      }
+    });
+    return modelObjects;
+  }, [scene]);
+
+  // Handle shift key for snap mode cycling
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isActive || event.key !== 'Shift') return;
+      
+      const snapModes: ('none' | 'vertex' | 'edge' | 'face')[] = ['none', 'vertex', 'edge', 'face'];
+      const currentIndex = snapModes.indexOf(snapMode);
+      const nextIndex = (currentIndex + 1) % snapModes.length;
+      onSnapModeChange?.(snapModes[nextIndex]);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isActive, snapMode, onSnapModeChange]);
+
+  // Highlight object with visual feedback
+  const highlightObject = useCallback((object: THREE.Object3D | null) => {
+    // Restore previous object
+    if (highlightedObject && originalMaterial) {
+      const mesh = highlightedObject as THREE.Mesh;
+      if (mesh.material) {
+        mesh.material = originalMaterial;
+      }
+    }
+
+    if (object) {
+      const mesh = object as THREE.Mesh;
+      if (mesh.material) {
+        setOriginalMaterial(mesh.material as THREE.Material);
+        
+        // Create highlight material
+        const highlightMaterial = (mesh.material as THREE.Material).clone();
+        if ('color' in highlightMaterial) {
+          (highlightMaterial as any).color.multiplyScalar(1.5);
+        }
+        if ('emissive' in highlightMaterial) {
+          (highlightMaterial as any).emissive.setHex(0x444444);
+        }
+        
+        mesh.material = highlightMaterial;
+      }
+    }
+
+    setHighlightedObject(object);
+  }, [highlightedObject, originalMaterial]);
+
   const handleClick = (event: MouseEvent) => {
     if (!isActive) return;
 
+    // Don't block event propagation to allow camera controls
     mouse.current.x = (event.clientX / gl.domElement.clientWidth) * 2 - 1;
     mouse.current.y = -(event.clientY / gl.domElement.clientHeight) * 2 + 1;
 
     raycaster.current.setFromCamera(mouse.current, camera);
-    const intersects = raycaster.current.intersectObjects(scene.children, true);
+    const modelObjects = getModelObjects();
+    const intersects = raycaster.current.intersectObjects(modelObjects, true);
 
     if (intersects.length > 0) {
       let point = intersects[0].point.clone();
+      const hitObject = intersects[0].object;
 
       // Apply snap logic
       if (snapMode !== 'none') {
@@ -56,14 +126,17 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
         const newPoint: MeasurementPoint = {
           position: point,
           id: Date.now().toString(),
+          objectHit: hitObject,
         };
         setPoints([newPoint]);
         setIsDrawing(true);
+        highlightObject(hitObject);
       } else if (points.length === 1) {
         // Second point - complete measurement
         const newPoint: MeasurementPoint = {
           position: point,
           id: Date.now().toString(),
+          objectHit: hitObject,
         };
         setPoints([points[0], newPoint]);
         setIsDrawing(false);
@@ -72,23 +145,32 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
         const distance = points[0].position.distanceTo(point);
         onMeasure?.(distance, [points[0].position, point]);
 
+        // Clear highlight
+        highlightObject(null);
+
         // Reset for next measurement
-        setTimeout(() => setPoints([]), 100);
+        setTimeout(() => {
+          setPoints([]);
+          setCurrentPoint(null);
+          setCurrentDistance(0);
+        }, 100);
       }
     }
   };
 
   const handleMouseMove = (event: MouseEvent) => {
-    if (!isActive || !isDrawing) return;
+    if (!isActive) return;
 
     mouse.current.x = (event.clientX / gl.domElement.clientWidth) * 2 - 1;
     mouse.current.y = -(event.clientY / gl.domElement.clientHeight) * 2 + 1;
 
     raycaster.current.setFromCamera(mouse.current, camera);
-    const intersects = raycaster.current.intersectObjects(scene.children, true);
+    const modelObjects = getModelObjects();
+    const intersects = raycaster.current.intersectObjects(modelObjects, true);
 
     if (intersects.length > 0) {
       let point = intersects[0].point.clone();
+      const hitObject = intersects[0].object;
 
       if (snapMode !== 'none') {
         point = applySnap(point, intersects[0], snapMode);
@@ -99,15 +181,29 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
       }
 
       setCurrentPoint(point);
+
+      // Update real-time distance
+      if (isDrawing && points.length === 1) {
+        const distance = points[0].position.distanceTo(point);
+        setCurrentDistance(distance);
+      }
+
+      // Highlight object on hover when not drawing
+      if (!isDrawing) {
+        highlightObject(hitObject);
+      }
+    } else {
+      setCurrentPoint(null);
+      if (!isDrawing) {
+        highlightObject(null);
+      }
     }
   };
 
   const applySnap = (point: THREE.Vector3, intersection: THREE.Intersection, mode: string): THREE.Vector3 => {
-    // Simplified snap logic - in real implementation, you'd check geometry vertices/edges
     const snapTolerance = 0.5;
     
     if (mode === 'vertex') {
-      // Snap to nearest vertex (simplified)
       const object = intersection.object as THREE.Mesh;
       if (object.geometry && object.geometry instanceof THREE.BufferGeometry) {
         const geometry = object.geometry;
@@ -128,6 +224,11 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
           }
           return closestVertex;
         }
+      }
+    } else if (mode === 'face') {
+      // Snap to face center
+      if (intersection.face) {
+        return intersection.point.clone();
       }
     }
 
@@ -157,13 +258,16 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
 
   useEffect(() => {
     if (isActive) {
-      gl.domElement.addEventListener('click', handleClick);
-      gl.domElement.addEventListener('mousemove', handleMouseMove);
+      // Use capture phase to handle events before OrbitControls
+      gl.domElement.addEventListener('click', handleClick, true);
+      gl.domElement.addEventListener('mousemove', handleMouseMove, true);
     }
 
     return () => {
-      gl.domElement.removeEventListener('click', handleClick);
-      gl.domElement.removeEventListener('mousemove', handleMouseMove);
+      gl.domElement.removeEventListener('click', handleClick, true);
+      gl.domElement.removeEventListener('mousemove', handleMouseMove, true);
+      // Clean up highlight when deactivating
+      highlightObject(null);
     };
   }, [isActive, snapMode, orthoMode, points, isDrawing]);
 
@@ -183,7 +287,7 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
       {/* Render measurement points */}
       {points.map((point) => (
         <mesh key={point.id} position={point.position}>
-          <sphereGeometry args={[0.1]} />
+          <sphereGeometry args={[0.15]} />
           <meshBasicMaterial color="red" />
         </mesh>
       ))}
@@ -191,17 +295,26 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
       {/* Render current point while drawing */}
       {currentPoint && isDrawing && (
         <mesh position={currentPoint}>
-          <sphereGeometry args={[0.1]} />
+          <sphereGeometry args={[0.12]} />
           <meshBasicMaterial color="orange" />
         </mesh>
       )}
 
-      {/* Render measurement line */}
+      {/* Render measurement line with real-time distance */}
       {points.length === 1 && currentPoint && (
-        <primitive object={new THREE.Line(
-          createLineGeometry(points[0].position, currentPoint),
-          new THREE.LineBasicMaterial({ color: 'yellow' })
-        )} />
+        <>
+          <primitive object={new THREE.Line(
+            createLineGeometry(points[0].position, currentPoint),
+            new THREE.LineBasicMaterial({ color: 'yellow', linewidth: 2 })
+          )} />
+          
+          {/* Real-time distance label */}
+          <Html position={points[0].position.clone().lerp(currentPoint, 0.5)}>
+            <div className="bg-yellow-600 text-white p-1 rounded text-xs font-mono">
+              {currentDistance.toFixed(3)}m
+            </div>
+          </Html>
+        </>
       )}
 
       {/* Render completed measurement line */}
@@ -209,16 +322,25 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
         <>
           <primitive object={new THREE.Line(
             createLineGeometry(points[0].position, points[1].position),
-            new THREE.LineBasicMaterial({ color: 'green' })
+            new THREE.LineBasicMaterial({ color: 'green', linewidth: 3 })
           )} />
           
-          {/* Distance label */}
+          {/* Final distance label */}
           <Html position={points[0].position.clone().lerp(points[1].position, 0.5)}>
-            <div className="bg-black text-white p-1 rounded text-xs">
-              {points[0].position.distanceTo(points[1].position).toFixed(2)}m
+            <div className="bg-green-600 text-white p-2 rounded text-sm font-mono font-bold">
+              {points[0].position.distanceTo(points[1].position).toFixed(3)}m
             </div>
           </Html>
         </>
+      )}
+
+      {/* Snap mode indicator */}
+      {isActive && (
+        <Html position={[0, 0, 0]} style={{ pointerEvents: 'none' }}>
+          <div className="fixed top-20 left-4 bg-blue-600 text-white p-2 rounded text-xs">
+            Snap: {snapMode.toUpperCase()} | Ortho: {orthoMode.toUpperCase()} | Press SHIFT to cycle snaps
+          </div>
+        </Html>
       )}
     </>
   );

@@ -152,6 +152,14 @@ export const PointCloudViewer: React.FC = () => {
     });
   }, [toast]);
 
+  const handleSnapModeChange = useCallback((mode: 'none' | 'vertex' | 'edge' | 'face') => {
+    setSnapMode(mode);
+    toast({
+      title: "Modo de snap cambiado",
+      description: `Snap: ${mode.toUpperCase()}`,
+    });
+  }, [toast]);
+
   const handleObjectSelection = useCallback((object: THREE.Object3D) => {
     setSelectedObject(object);
     if (sectionBoxActive) {
@@ -267,6 +275,7 @@ export const PointCloudViewer: React.FC = () => {
           snapMode={snapMode}
           orthoMode={orthoMode}
           onMeasure={handleMeasurement}
+          onSnapModeChange={handleSnapModeChange}
         />
 
         {/* Section Box */}
@@ -284,7 +293,7 @@ export const PointCloudViewer: React.FC = () => {
           zoomSpeed={0.6}
           panSpeed={0.8}
           rotateSpeed={0.4}
-          enabled={!measurementActive && !sectionBoxActive}
+          enabled={!sectionBoxActive}
         />
         <Stats />
         <axesHelper args={[10]} />
