@@ -16,6 +16,7 @@ import { MeasurementTool } from './MeasurementTool';
 import { SectionBox } from './SectionBox';
 import { ToolsPanel } from './ToolsPanel';
 import { useToast } from '@/hooks/use-toast';
+import { ObjectSelector } from './ObjectSelector';
 
 /* -------------------------------------------------------------------------- */
 /*  Tipos                                                                    */
@@ -61,6 +62,7 @@ export const PointCloudViewer: React.FC = () => {
   const [controlsVisible, setControlsVisible] = useState(true);
   const { toast } = useToast();
   const controlsRef = useRef<any>(null);
+  const dragState = useRef({ isDragging: false });
 
   /* -------------------------------------------------------------------------- */
   /*  Memorización de datos                                                      */
@@ -170,11 +172,15 @@ export const PointCloudViewer: React.FC = () => {
     }
   }, [sectionBoxActive, toast]);
 
+  const handleObjectHover = useCallback((object: THREE.Object3D | null) => {
+    // Solo para feedback visual, no necesita toast
+  }, []);
+
   const handleSectionChange = useCallback((bounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
     setSectionBounds(bounds);
     
-    // Apply clipping planes to all models
-    if (bounds) {
+    // Apply clipping planes to selected object
+    if (bounds && selectedObject) {
       const clippingPlanes = [
         new THREE.Plane(new THREE.Vector3(1, 0, 0), -bounds.min.x),
         new THREE.Plane(new THREE.Vector3(-1, 0, 0), bounds.max.x),
@@ -184,22 +190,19 @@ export const PointCloudViewer: React.FC = () => {
         new THREE.Plane(new THREE.Vector3(0, 0, -1), bounds.max.z),
       ];
 
-      // Apply clipping to all meshes in the scene
-      if (selectedObject) {
-        selectedObject.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach(mat => {
-                mat.clippingPlanes = clippingPlanes;
-                mat.needsUpdate = true;
-              });
-            } else {
-              child.material.clippingPlanes = clippingPlanes;
-              child.material.needsUpdate = true;
-            }
+      selectedObject.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(mat => {
+              mat.clippingPlanes = clippingPlanes;
+              mat.needsUpdate = true;
+            });
+          } else {
+            child.material.clippingPlanes = clippingPlanes;
+            child.material.needsUpdate = true;
           }
-        });
-      }
+        }
+      });
     }
   }, [selectedObject]);
 
@@ -327,6 +330,13 @@ export const PointCloudViewer: React.FC = () => {
           />
         ))}
 
+        {/* Object Selector for hover/selection effects */}
+        <ObjectSelector
+          isActive={sectionBoxActive}
+          onObjectHover={handleObjectHover}
+          onObjectSelect={handleObjectSelection}
+        />
+
         {/* Measurement Tool */}
         <MeasurementTool
           isActive={measurementActive}
@@ -334,6 +344,7 @@ export const PointCloudViewer: React.FC = () => {
           orthoMode={orthoMode}
           onMeasure={handleMeasurement}
           onSnapModeChange={handleSnapModeChange}
+          disableControls={false}
         />
 
         {/* Section Box */}
@@ -341,7 +352,6 @@ export const PointCloudViewer: React.FC = () => {
           targetObject={selectedObject}
           isActive={sectionBoxActive}
           onSectionChange={handleSectionChange}
-          onObjectSelection={handleObjectSelection}
         />
 
         <OrbitControls 
@@ -352,7 +362,7 @@ export const PointCloudViewer: React.FC = () => {
           zoomSpeed={0.6}
           panSpeed={0.8}
           rotateSpeed={0.4}
-          enabled={true}
+          enabled={!dragState.isDragging}
         />
         <Stats />
         <axesHelper args={[10]} />

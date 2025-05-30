@@ -7,25 +7,24 @@ interface SectionBoxProps {
   targetObject: THREE.Object3D | null;
   isActive: boolean;
   onSectionChange?: (bounds: { min: THREE.Vector3; max: THREE.Vector3 }) => void;
-  onObjectSelection?: (object: THREE.Object3D | null) => void;
 }
 
 export const SectionBox: React.FC<SectionBoxProps> = ({
   targetObject,
   isActive,
   onSectionChange,
-  onObjectSelection,
 }) => {
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
   const [dragState, setDragState] = useState<{ 
     isDragging: boolean; 
     face: string | null; 
     startPoint: THREE.Vector3 | null;
-  }>({ isDragging: false, face: null, startPoint: null });
+    startBounds: { min: THREE.Vector3; max: THREE.Vector3 } | null;
+  }>({ isDragging: false, face: null, startPoint: null, startBounds: null });
   const [hoveredHandle, setHoveredHandle] = useState<string | null>(null);
 
   const boxRef = useRef<THREE.Group>(null);
-  const { camera, scene, gl, raycaster, mouse } = useThree();
+  const { camera, gl, raycaster } = useThree();
   const localRaycaster = useRef(new THREE.Raycaster());
   const localMouse = useRef(new THREE.Vector2());
 
@@ -33,9 +32,10 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   useEffect(() => {
     if (targetObject && isActive) {
       const box = new THREE.Box3().setFromObject(targetObject);
+      
       // Expandir un poco el cubo para que sea visible
       const size = box.getSize(new THREE.Vector3());
-      const expansion = Math.max(size.x, size.y, size.z) * 0.1;
+      const expansion = Math.max(size.x, size.y, size.z) * 0.05;
       box.expandByScalar(expansion);
       
       setBounds({
@@ -46,45 +46,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       setBounds(null);
     }
   }, [targetObject, isActive]);
-
-  // Handle object selection when section tool is active
-  const handleCanvasClick = (event: MouseEvent) => {
-    if (!isActive) return;
-
-    // Calcular posición del mouse
-    const rect = gl.domElement.getBoundingClientRect();
-    localMouse.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    localMouse.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    localRaycaster.current.setFromCamera(localMouse.current, camera);
-
-    // Buscar intersecciones con objetos de la escena (excluyendo la UI)
-    const intersectable: THREE.Object3D[] = [];
-    scene.traverse((child) => {
-      if (child.type === 'Mesh' || child.type === 'Group') {
-        // Excluir helpers y UI elements
-        if (!child.name.includes('helper') && 
-            !child.name.includes('grid') && 
-            !child.name.includes('axes') &&
-            !child.userData.isUI) {
-          intersectable.push(child);
-        }
-      }
-    });
-
-    const intersects = localRaycaster.current.intersectObjects(intersectable, true);
-    
-    if (intersects.length > 0) {
-      // Encontrar el objeto padre más relevante
-      let selectedObject = intersects[0].object;
-      while (selectedObject.parent && selectedObject.parent.type !== 'Scene') {
-        selectedObject = selectedObject.parent;
-      }
-      
-      console.log('Objeto seleccionado para sección:', selectedObject);
-      onObjectSelection?.(selectedObject);
-    }
-  };
 
   const handleMouseDown = (event: MouseEvent) => {
     if (!isActive || !bounds) return;
@@ -108,16 +69,14 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
             isDragging: true,
             face,
             startPoint: intersects[0].point.clone(),
+            startBounds: {
+              min: bounds.min.clone(),
+              max: bounds.max.clone()
+            }
           });
           event.stopPropagation();
         }
-      } else {
-        // Si no se hizo clic en un handle, intentar seleccionar objeto
-        handleCanvasClick(event);
       }
-    } else {
-      // Si no hay cubo, intentar seleccionar objeto
-      handleCanvasClick(event);
     }
   };
 
@@ -137,7 +96,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
         if (intersects.length > 0) {
           const face = intersects[0].object.userData.face;
           setHoveredHandle(face);
-          gl.domElement.style.cursor = 'pointer';
+          gl.domElement.style.cursor = 'grab';
         } else {
           setHoveredHandle(null);
           gl.domElement.style.cursor = 'default';
@@ -146,59 +105,71 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
 
     // Handle dragging
-    if (!dragState.isDragging || !bounds || !dragState.face) return;
+    if (!dragState.isDragging || !bounds || !dragState.face || !dragState.startPoint || !dragState.startBounds) return;
 
     localRaycaster.current.setFromCamera(localMouse.current, camera);
     
-    // Project mouse to world space
+    // Calculate movement based on face orientation
     const plane = new THREE.Plane();
     const worldPosition = new THREE.Vector3();
     
-    // Set plane based on face being dragged
+    // Set plane normal based on face being dragged
+    let normal = new THREE.Vector3();
     switch (dragState.face) {
       case 'x-min':
       case 'x-max':
-        plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(1, 0, 0), dragState.startPoint!);
+        normal.set(1, 0, 0);
         break;
       case 'y-min':
       case 'y-max':
-        plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), dragState.startPoint!);
+        normal.set(0, 1, 0);
         break;
       case 'z-min':
       case 'z-max':
-        plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 0, 1), dragState.startPoint!);
+        normal.set(0, 0, 1);
         break;
     }
 
+    plane.setFromNormalAndCoplanarPoint(normal, dragState.startPoint);
     const intersectionPoint = localRaycaster.current.ray.intersectPlane(plane, worldPosition);
+    
     if (!intersectionPoint) return;
 
+    // Calculate movement delta
+    const movement = intersectionPoint.clone().sub(dragState.startPoint);
+    
     // Update bounds based on drag
     const newBounds = {
-      min: bounds.min.clone(),
-      max: bounds.max.clone(),
+      min: dragState.startBounds.min.clone(),
+      max: dragState.startBounds.max.clone(),
     };
 
-    const minDistance = 0.5; // Distancia mínima entre caras
+    const minSize = 1; // Tamaño mínimo del cubo
 
     switch (dragState.face) {
       case 'x-min':
-        newBounds.min.x = Math.min(worldPosition.x, bounds.max.x - minDistance);
+        newBounds.min.x += movement.x;
+        newBounds.min.x = Math.min(newBounds.min.x, newBounds.max.x - minSize);
         break;
       case 'x-max':
-        newBounds.max.x = Math.max(worldPosition.x, bounds.min.x + minDistance);
+        newBounds.max.x += movement.x;
+        newBounds.max.x = Math.max(newBounds.max.x, newBounds.min.x + minSize);
         break;
       case 'y-min':
-        newBounds.min.y = Math.min(worldPosition.y, bounds.max.y - minDistance);
+        newBounds.min.y += movement.y;
+        newBounds.min.y = Math.min(newBounds.min.y, newBounds.max.y - minSize);
         break;
       case 'y-max':
-        newBounds.max.y = Math.max(worldPosition.y, bounds.min.y + minDistance);
+        newBounds.max.y += movement.y;
+        newBounds.max.y = Math.max(newBounds.max.y, newBounds.min.y + minSize);
         break;
       case 'z-min':
-        newBounds.min.z = Math.min(worldPosition.z, bounds.max.z - minDistance);
+        newBounds.min.z += movement.z;
+        newBounds.min.z = Math.min(newBounds.min.z, newBounds.max.z - minSize);
         break;
       case 'z-max':
-        newBounds.max.z = Math.max(worldPosition.z, bounds.min.z + minDistance);
+        newBounds.max.z += movement.z;
+        newBounds.max.z = Math.max(newBounds.max.z, newBounds.min.z + minSize);
         break;
     }
 
@@ -207,8 +178,10 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   };
 
   const handleMouseUp = () => {
-    setDragState({ isDragging: false, face: null, startPoint: null });
-    gl.domElement.style.cursor = 'default';
+    if (dragState.isDragging) {
+      setDragState({ isDragging: false, face: null, startPoint: null, startBounds: null });
+      gl.domElement.style.cursor = 'default';
+    }
   };
 
   useEffect(() => {
@@ -236,16 +209,16 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       {/* Section box wireframe */}
       <mesh position={center}>
         <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial wireframe color="yellow" transparent opacity={0.4} />
+        <meshBasicMaterial wireframe color="#00FFFF" transparent opacity={0.6} />
       </mesh>
 
       {/* Section box faces for better visibility */}
       <mesh position={center}>
         <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial color="yellow" transparent opacity={0.1} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#00FFFF" transparent opacity={0.05} side={THREE.DoubleSide} />
       </mesh>
 
-      {/* Drag handles (triangular cones) */}
+      {/* Drag handles (triangular controls) */}
       {[
         { face: 'x-min', position: [bounds.min.x, center.y, center.z], rotation: [0, 0, Math.PI / 2] },
         { face: 'x-max', position: [bounds.max.x, center.y, center.z], rotation: [0, 0, -Math.PI / 2] },
@@ -265,18 +238,18 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
           >
             {/* Triangular handle */}
             <mesh userData={{ face: handle.face }}>
-              <coneGeometry args={[0.3, 0.6, 3]} />
+              <coneGeometry args={[0.5, 1.0, 4]} />
               <meshBasicMaterial 
-                color={isDragging ? "red" : (isHovered ? "orange" : "blue")} 
+                color={isDragging ? "#FF0000" : (isHovered ? "#FFA500" : "#0066FF")} 
                 transparent 
                 opacity={0.8}
               />
             </mesh>
-            {/* Handle shaft */}
-            <mesh position={[0, 0.4, 0]} userData={{ face: handle.face }}>
-              <cylinderGeometry args={[0.08, 0.08, 0.8]} />
+            {/* Handle shaft for better visibility */}
+            <mesh position={[0, 0.6, 0]} userData={{ face: handle.face }}>
+              <cylinderGeometry args={[0.1, 0.1, 1.2]} />
               <meshBasicMaterial 
-                color={isDragging ? "red" : (isHovered ? "orange" : "blue")} 
+                color={isDragging ? "#FF0000" : (isHovered ? "#FFA500" : "#0066FF")} 
                 transparent 
                 opacity={0.6}
               />
@@ -284,21 +257,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
           </group>
         );
       })}
-
-      {/* Face labels for better UX */}
-      {[
-        { face: 'x-min', position: [bounds.min.x - 0.5, center.y, center.z], text: 'X-' },
-        { face: 'x-max', position: [bounds.max.x + 0.5, center.y, center.z], text: 'X+' },
-        { face: 'y-min', position: [center.x, bounds.min.y - 0.5, center.z], text: 'Y-' },
-        { face: 'y-max', position: [center.x, bounds.max.y + 0.5, center.z], text: 'Y+' },
-        { face: 'z-min', position: [center.x, center.y, bounds.min.z - 0.5], text: 'Z-' },
-        { face: 'z-max', position: [center.x, center.y, bounds.max.z + 0.5], text: 'Z+' },
-      ].map((label) => (
-        <mesh key={label.face} position={label.position as [number, number, number]}>
-          <planeGeometry args={[0.5, 0.2]} />
-          <meshBasicMaterial color="white" transparent opacity={0.8} />
-        </mesh>
-      ))}
     </group>
   );
 };
