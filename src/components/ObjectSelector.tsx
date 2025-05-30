@@ -17,7 +17,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   const { camera, scene, gl } = useThree();
   const [hoveredObject, setHoveredObject] = useState<THREE.Object3D | null>(null);
   const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
-  const originalMaterials = useRef(new Map<THREE.Mesh, THREE.Material | THREE.Material[]>());
+  const originalMaterials = useRef(new Map<THREE.Mesh | THREE.Points, THREE.Material | THREE.Material[]>());
   const localRaycaster = useRef(new THREE.Raycaster());
   const localMouse = useRef(new THREE.Vector2());
 

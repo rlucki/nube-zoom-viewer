@@ -344,7 +344,6 @@ export const PointCloudViewer: React.FC = () => {
           orthoMode={orthoMode}
           onMeasure={handleMeasurement}
           onSnapModeChange={handleSnapModeChange}
-          disableControls={false}
         />
 
         {/* Section Box */}
@@ -362,7 +361,6 @@ export const PointCloudViewer: React.FC = () => {
           zoomSpeed={0.6}
           panSpeed={0.8}
           rotateSpeed={0.4}
-          enabled={!dragState.isDragging}
         />
         <Stats />
         <axesHelper args={[10]} />
