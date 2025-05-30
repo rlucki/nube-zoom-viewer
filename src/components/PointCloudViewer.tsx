@@ -134,7 +134,7 @@ export const PointCloudViewer: React.FC = () => {
   const [sectionBounds, setSectionBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
 
   /* -------------------------------------------------------------------------- */
-  /*  Funciones de manejo de measurement y section tools                         */
+  /*  Enhanced functions for measurement and section tools                       */
   /* -------------------------------------------------------------------------- */
   const handleMeasurement = useCallback((distance: number, points: [THREE.Vector3, THREE.Vector3]) => {
     setMeasurements(prev => [...prev, { distance, points }]);
@@ -160,20 +160,78 @@ export const PointCloudViewer: React.FC = () => {
     });
   }, [toast]);
 
-  const handleObjectSelection = useCallback((object: THREE.Object3D) => {
+  const handleObjectSelection = useCallback((object: THREE.Object3D | null) => {
     setSelectedObject(object);
-    if (sectionBoxActive) {
+    if (object && sectionBoxActive) {
       toast({
-        title: "Objeto seleccionado",
-        description: "Arrastra las flechas azules para seccionar",
+        title: "Objeto seleccionado para sección",
+        description: "Arrastra los controles triangulares para seccionar",
       });
     }
   }, [sectionBoxActive, toast]);
 
   const handleSectionChange = useCallback((bounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
     setSectionBounds(bounds);
-    // Apply clipping planes to models here if needed
-  }, []);
+    
+    // Apply clipping planes to all models
+    if (bounds) {
+      const clippingPlanes = [
+        new THREE.Plane(new THREE.Vector3(1, 0, 0), -bounds.min.x),
+        new THREE.Plane(new THREE.Vector3(-1, 0, 0), bounds.max.x),
+        new THREE.Plane(new THREE.Vector3(0, 1, 0), -bounds.min.y),
+        new THREE.Plane(new THREE.Vector3(0, -1, 0), bounds.max.y),
+        new THREE.Plane(new THREE.Vector3(0, 0, 1), -bounds.min.z),
+        new THREE.Plane(new THREE.Vector3(0, 0, -1), bounds.max.z),
+      ];
+
+      // Apply clipping to all meshes in the scene
+      if (selectedObject) {
+        selectedObject.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(mat => {
+                mat.clippingPlanes = clippingPlanes;
+                mat.needsUpdate = true;
+              });
+            } else {
+              child.material.clippingPlanes = clippingPlanes;
+              child.material.needsUpdate = true;
+            }
+          }
+        });
+      }
+    }
+  }, [selectedObject]);
+
+  const handleSectionBoxToggle = useCallback((active: boolean) => {
+    setSectionBoxActive(active);
+    if (!active) {
+      setSelectedObject(null);
+      setSectionBounds(null);
+      
+      // Remove clipping planes when deactivating
+      if (selectedObject) {
+        selectedObject.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(mat => {
+                mat.clippingPlanes = [];
+                mat.needsUpdate = true;
+              });
+            } else {
+              child.material.clippingPlanes = [];
+              child.material.needsUpdate = true;
+            }
+          }
+        });
+      }
+    }
+    
+    toast({
+      title: active ? "Herramienta de sección activada" : "Herramienta de sección desactivada",
+      description: active ? "Haz clic en un modelo para seleccionarlo" : "Planos de corte eliminados",
+    });
+  }, [selectedObject, toast]);
 
   /* -------------------------------------------------------------------------- */
   /*  Renderizado                                                                */
@@ -224,7 +282,7 @@ export const PointCloudViewer: React.FC = () => {
         measurementActive={measurementActive}
         setMeasurementActive={setMeasurementActive}
         sectionBoxActive={sectionBoxActive}
-        setSectionBoxActive={setSectionBoxActive}
+        setSectionBoxActive={handleSectionBoxToggle}
         snapMode={snapMode}
         setSnapMode={setSnapMode}
         orthoMode={orthoMode}
@@ -245,7 +303,7 @@ export const PointCloudViewer: React.FC = () => {
       <Canvas
         camera={{ position: [50, 50, 50], fov: 60, near: 0.01, far: 100000 }}
         className="absolute inset-0"
-        gl={{ antialias: true, alpha: true }}
+        gl={{ antialias: true, alpha: true, localClippingEnabled: true }}
       >
         <color attach="background" args={['#1a1a1a']} />
         
@@ -283,6 +341,7 @@ export const PointCloudViewer: React.FC = () => {
           targetObject={selectedObject}
           isActive={sectionBoxActive}
           onSectionChange={handleSectionChange}
+          onObjectSelection={handleObjectSelection}
         />
 
         <OrbitControls 
@@ -293,7 +352,7 @@ export const PointCloudViewer: React.FC = () => {
           zoomSpeed={0.6}
           panSpeed={0.8}
           rotateSpeed={0.4}
-          enabled={!sectionBoxActive}
+          enabled={true}
         />
         <Stats />
         <axesHelper args={[10]} />
