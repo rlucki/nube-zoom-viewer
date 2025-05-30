@@ -167,6 +167,17 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
     };
   }, [isActive, snapMode, orthoMode, points, isDrawing]);
 
+  // Create line geometry for rendering
+  const createLineGeometry = (point1: THREE.Vector3, point2: THREE.Vector3) => {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array([
+      point1.x, point1.y, point1.z,
+      point2.x, point2.y, point2.z,
+    ]);
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    return geometry;
+  };
+
   return (
     <>
       {/* Render measurement points */}
@@ -187,39 +198,19 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
 
       {/* Render measurement line */}
       {points.length === 1 && currentPoint && (
-        <line>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              count={2}
-              array={new Float32Array([
-                points[0].position.x, points[0].position.y, points[0].position.z,
-                currentPoint.x, currentPoint.y, currentPoint.z,
-              ])}
-              itemSize={3}
-            />
-          </bufferGeometry>
-          <lineBasicMaterial color="yellow" />
-        </line>
+        <primitive object={new THREE.Line(
+          createLineGeometry(points[0].position, currentPoint),
+          new THREE.LineBasicMaterial({ color: 'yellow' })
+        )} />
       )}
 
       {/* Render completed measurement line */}
       {points.length === 2 && (
         <>
-          <line>
-            <bufferGeometry>
-              <bufferAttribute
-                attach="attributes-position"
-                count={2}
-                array={new Float32Array([
-                  points[0].position.x, points[0].position.y, points[0].position.z,
-                  points[1].position.x, points[1].position.y, points[1].position.z,
-                ])}
-                itemSize={3}
-              />
-            </bufferGeometry>
-            <lineBasicMaterial color="green" />
-          </line>
+          <primitive object={new THREE.Line(
+            createLineGeometry(points[0].position, points[1].position),
+            new THREE.LineBasicMaterial({ color: 'green' })
+          )} />
           
           {/* Distance label */}
           <Html position={points[0].position.clone().lerp(points[1].position, 0.5)}>
