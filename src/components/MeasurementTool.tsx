@@ -108,23 +108,26 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
     
     if (mode === 'vertex') {
       // Snap to nearest vertex (simplified)
-      const geometry = intersection.object.geometry as THREE.BufferGeometry;
-      if (geometry.attributes.position) {
-        const positions = geometry.attributes.position.array;
-        let closestVertex = point.clone();
-        let minDistance = Infinity;
+      const object = intersection.object as THREE.Mesh;
+      if (object.geometry && object.geometry instanceof THREE.BufferGeometry) {
+        const geometry = object.geometry;
+        if (geometry.attributes.position) {
+          const positions = geometry.attributes.position.array;
+          let closestVertex = point.clone();
+          let minDistance = Infinity;
 
-        for (let i = 0; i < positions.length; i += 3) {
-          const vertex = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]);
-          vertex.applyMatrix4(intersection.object.matrixWorld);
-          const distance = point.distanceTo(vertex);
-          
-          if (distance < minDistance && distance < snapTolerance) {
-            minDistance = distance;
-            closestVertex = vertex;
+          for (let i = 0; i < positions.length; i += 3) {
+            const vertex = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]);
+            vertex.applyMatrix4(intersection.object.matrixWorld);
+            const distance = point.distanceTo(vertex);
+            
+            if (distance < minDistance && distance < snapTolerance) {
+              minDistance = distance;
+              closestVertex = vertex;
+            }
           }
+          return closestVertex;
         }
-        return closestVertex;
       }
     }
 

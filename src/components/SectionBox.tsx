@@ -153,12 +153,10 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   return (
     <group ref={boxRef}>
       {/* Section box wireframe */}
-      <boxHelper args={[{ geometry: { parameters: { width: size.x, height: size.y, depth: size.z } } }]}>
-        <mesh position={center}>
-          <boxGeometry args={[size.x, size.y, size.z]} />
-          <meshBasicMaterial wireframe color="yellow" transparent opacity={0.3} />
-        </mesh>
-      </boxHelper>
+      <mesh position={center}>
+        <boxGeometry args={[size.x, size.y, size.z]} />
+        <meshBasicMaterial wireframe color="yellow" transparent opacity={0.3} />
+      </mesh>
 
       {/* Drag handles (arrows) */}
       {[
