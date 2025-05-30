@@ -12,6 +12,9 @@ import { FileUploader } from './FileUploader';
 import { ViewerControls } from './ViewerControls';
 import { PointCloud } from './PointCloud';
 import { IFCModel } from './IFCModel';
+import { MeasurementTool } from './MeasurementTool';
+import { SectionBox } from './SectionBox';
+import { ToolsPanel } from './ToolsPanel';
 import { useToast } from '@/hooks/use-toast';
 
 /* -------------------------------------------------------------------------- */
@@ -120,6 +123,51 @@ export const PointCloudViewer: React.FC = () => {
   }, []);
 
   /* -------------------------------------------------------------------------- */
+  /*  New states for measurement and section tools                              */
+  /* -------------------------------------------------------------------------- */
+  const [measurementActive, setMeasurementActive] = useState(false);
+  const [sectionBoxActive, setSectionBoxActive] = useState(false);
+  const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
+  const [snapMode, setSnapMode] = useState<'none' | 'vertex' | 'edge' | 'face'>('vertex');
+  const [orthoMode, setOrthoMode] = useState<'none' | 'x' | 'y' | 'z'>('none');
+  const [measurements, setMeasurements] = useState<Array<{ distance: number; points: [THREE.Vector3, THREE.Vector3] }>>([]);
+  const [sectionBounds, setSectionBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
+
+  /* -------------------------------------------------------------------------- */
+  /*  Funciones de manejo de measurement y section tools                         */
+  /* -------------------------------------------------------------------------- */
+  const handleMeasurement = useCallback((distance: number, points: [THREE.Vector3, THREE.Vector3]) => {
+    setMeasurements(prev => [...prev, { distance, points }]);
+    toast({
+      title: "Medición completada",
+      description: `Distancia: ${distance.toFixed(3)}m`,
+    });
+  }, [toast]);
+
+  const handleClearMeasurements = useCallback(() => {
+    setMeasurements([]);
+    toast({
+      title: "Mediciones limpiadas",
+      description: "Todas las mediciones han sido eliminadas",
+    });
+  }, [toast]);
+
+  const handleObjectSelection = useCallback((object: THREE.Object3D) => {
+    setSelectedObject(object);
+    if (sectionBoxActive) {
+      toast({
+        title: "Objeto seleccionado",
+        description: "Arrastra las flechas azules para seccionar",
+      });
+    }
+  }, [sectionBoxActive, toast]);
+
+  const handleSectionChange = useCallback((bounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
+    setSectionBounds(bounds);
+    // Apply clipping planes to models here if needed
+  }, []);
+
+  /* -------------------------------------------------------------------------- */
   /*  Renderizado                                                                */
   /* -------------------------------------------------------------------------- */
   return (
@@ -164,6 +212,19 @@ export const PointCloudViewer: React.FC = () => {
         hasIFCModel={ifcModels.length > 0}
       />
 
+      <ToolsPanel
+        measurementActive={measurementActive}
+        setMeasurementActive={setMeasurementActive}
+        sectionBoxActive={sectionBoxActive}
+        setSectionBoxActive={setSectionBoxActive}
+        snapMode={snapMode}
+        setSnapMode={setSnapMode}
+        orthoMode={orthoMode}
+        setOrthoMode={setOrthoMode}
+        measurements={measurements}
+        onClearMeasurements={handleClearMeasurements}
+      />
+
       {isLoading && (
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-30">
           <div className="bg-white p-6 rounded-lg shadow-lg">
@@ -200,6 +261,21 @@ export const PointCloudViewer: React.FC = () => {
           />
         ))}
 
+        {/* Measurement Tool */}
+        <MeasurementTool
+          isActive={measurementActive}
+          snapMode={snapMode}
+          orthoMode={orthoMode}
+          onMeasure={handleMeasurement}
+        />
+
+        {/* Section Box */}
+        <SectionBox
+          targetObject={selectedObject}
+          isActive={sectionBoxActive}
+          onSectionChange={handleSectionChange}
+        />
+
         <OrbitControls 
           ref={controlsRef}
           enablePan={true}
@@ -208,6 +284,7 @@ export const PointCloudViewer: React.FC = () => {
           zoomSpeed={0.6}
           panSpeed={0.8}
           rotateSpeed={0.4}
+          enabled={!measurementActive && !sectionBoxActive}
         />
         <Stats />
         <axesHelper args={[10]} />
