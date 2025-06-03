@@ -8,6 +8,7 @@ import React, {
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import * as THREE from 'three';
+
 import { FileUploader } from './FileUploader';
 import { ViewerControls } from './ViewerControls';
 import { PointCloud } from './PointCloud';
@@ -15,11 +16,12 @@ import { IFCModel } from './IFCModel';
 import { MeasurementTool } from './MeasurementTool';
 import { SectionBox } from './SectionBox';
 import { ToolsPanel } from './ToolsPanel';
-import { useToast } from '@/hooks/use-toast';
 import { ObjectSelector } from './ObjectSelector';
 
+import { useToast } from '@/hooks/use-toast';
+
 /* -------------------------------------------------------------------------- */
-/*  Tipos                                                                    */
+/*  Tipos                                                                     */
 /* -------------------------------------------------------------------------- */
 export interface Point {
   x: number;
@@ -49,10 +51,11 @@ interface LoadedFile {
   data: ViewerData;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Componente                                                                */
+/* -------------------------------------------------------------------------- */
 export const PointCloudViewer: React.FC = () => {
-  /* -------------------------------------------------------------------------- */
-  /*  Estados                                                                    */
-  /* -------------------------------------------------------------------------- */
+  /* -------------------- Estados generales ---------------------------------- */
   const [loadedFiles, setLoadedFiles] = useState<LoadedFile[]>([]);
   const [density, setDensity] = useState(0.1);
   const [pointSize, setPointSize] = useState(2);
@@ -60,143 +63,129 @@ export const PointCloudViewer: React.FC = () => {
   const [transparency, setTransparency] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const { toast } = useToast();
-  const controlsRef = useRef<any>(null);
-  const dragState = useRef({ isDragging: false });
-  
-  // Add isDragging state for section box
-  const [isDragging, setIsDragging] = useState(false);
 
-  /* -------------------------------------------------------------------------- */
-  /*  Memorización de datos                                                      */
-  /* -------------------------------------------------------------------------- */
-  // Muestra un mensaje de bienvenida al cargar la página
+  const controlsRef = useRef<any>(null);
+  const { toast } = useToast();
+
+  /* -------------------- States de herramientas ----------------------------- */
+  const [measurementActive, setMeasurementActive] = useState(false);
+  const [sectionBoxActive, setSectionBoxActive]   = useState(false);
+  const [selectedObject,   setSelectedObject]     = useState<THREE.Object3D | null>(null);
+  const [snapMode,  setSnapMode]  = useState<'none' | 'vertex' | 'edge' | 'face'>('vertex');
+  const [orthoMode, setOrthoMode] = useState<'none' | 'x' | 'y' | 'z'>('none');
+  const [measurements, setMeasurements] = useState<
+    Array<{ distance: number; points: [THREE.Vector3, THREE.Vector3] }>
+  >([]);
+  const [isDragging, setIsDragging] = useState(false); // arrastre de SectionBox
+
+  /* -------------------- Mensaje de bienvenida ------------------------------ */
   useEffect(() => {
     toast({
-      title: "¡Bienvenido!",
-      description: "Carga un archivo .PLY, .LAS o .IFC para comenzar",
+      title: '¡Bienvenido!',
+      description: 'Carga un archivo .PLY, .LAS o .IFC para comenzar',
     });
   }, [toast]);
 
-  // Recalcula los puntos filtrados según la densidad
+  /* -------------------- Memos: muestras y modelos IFC ---------------------- */
   const sampledPoints = useMemo(() => {
-    const pointCloudFiles = loadedFiles.filter(file => file.type === 'pointcloud');
-    if (pointCloudFiles.length === 0) return [];
-    
-    const allPoints = pointCloudFiles.flatMap(file => file.data as Point[]);
-    const sampleSize = Math.ceil(allPoints.length * density);
-    const step = Math.max(1, Math.floor(allPoints.length / sampleSize));
-    
-    return allPoints.filter((_, index) => index % step === 0);
+    const pcs = loadedFiles.filter((f) => f.type === 'pointcloud');
+    if (pcs.length === 0) return [];
+
+    const all = pcs.flatMap((f) => f.data as Point[]);
+    const sampleSize = Math.ceil(all.length * density);
+    const step = Math.max(1, Math.floor(all.length / sampleSize));
+
+    return all.filter((_, i) => i % step === 0);
   }, [loadedFiles, density]);
 
-  const ifcModels = useMemo(() => {
-    return loadedFiles.filter(file => file.type === 'ifc');
-  }, [loadedFiles]);
+  const ifcModels = useMemo(
+    () => loadedFiles.filter((f) => f.type === 'ifc'),
+    [loadedFiles],
+  );
 
-  /* -------------------------------------------------------------------------- */
-  /*  Funciones de carga y limpieza de datos                                    */
-  /* -------------------------------------------------------------------------- */
-  const handleFileLoad = useCallback((data: ViewerData, fileName: string) => {
-    const newFile: LoadedFile = {
-      id: Date.now().toString(),
-      name: fileName,
-      type: Array.isArray(data) ? 'pointcloud' : 'ifc',
-      data
-    };
-
-    setLoadedFiles(prev => [...prev, newFile]);
-    
-    toast({
-      title: "Archivo cargado",
-      description: `${fileName} se ha cargado correctamente`,
-    });
-  }, [toast]);
+  /* -------------------- Carga y limpieza ----------------------------------- */
+  const handleFileLoad = useCallback(
+    (data: ViewerData, fileName: string) => {
+      const newFile: LoadedFile = {
+        id: Date.now().toString(),
+        name: fileName,
+        type: Array.isArray(data) ? 'pointcloud' : 'ifc',
+        data,
+      };
+      setLoadedFiles((prev) => [...prev, newFile]);
+      toast({
+        title: 'Archivo cargado',
+        description: `${fileName} se ha cargado correctamente`,
+      });
+    },
+    [toast],
+  );
 
   const handleClear = useCallback(() => {
     setLoadedFiles([]);
     toast({
-      title: "Datos limpiados",
-      description: "Todos los archivos han sido eliminados",
+      title: 'Datos limpiados',
+      description: 'Todos los archivos han sido eliminados',
     });
   }, [toast]);
 
   const resetCamera = useCallback(() => {
-    if (controlsRef.current) {
-      controlsRef.current.reset();
-    }
+    controlsRef.current?.reset();
   }, []);
 
-  /* -------------------------------------------------------------------------- */
-  /*  New states for measurement and section tools                              */
-  /* -------------------------------------------------------------------------- */
-  const [measurementActive, setMeasurementActive] = useState(false);
-  const [sectionBoxActive, setSectionBoxActive] = useState(false);
-  const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
-  const [snapMode, setSnapMode] = useState<'none' | 'vertex' | 'edge' | 'face'>('vertex');
-  const [orthoMode, setOrthoMode] = useState<'none' | 'x' | 'y' | 'z'>('none');
-  const [measurements, setMeasurements] = useState<Array<{ distance: number; points: [THREE.Vector3, THREE.Vector3] }>>([]);
-  const [sectionBounds, setSectionBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
-
-  /* -------------------------------------------------------------------------- */
-  /*  Enhanced functions for measurement and section tools                       */
-  /* -------------------------------------------------------------------------- */
-  const handleMeasurement = useCallback((distance: number, points: [THREE.Vector3, THREE.Vector3]) => {
-    setMeasurements(prev => [...prev, { distance, points }]);
-    toast({
-      title: "Medición completada",
-      description: `Distancia: ${distance.toFixed(3)}m`,
-    });
-  }, [toast]);
+  /* -------------------- Medición ------------------------------------------- */
+  const handleMeasurement = useCallback(
+    (distance: number, points: [THREE.Vector3, THREE.Vector3]) => {
+      setMeasurements((p) => [...p, { distance, points }]);
+      toast({
+        title: 'Medición completada',
+        description: `Distancia: ${distance.toFixed(3)} m`,
+      });
+    },
+    [toast],
+  );
 
   const handleClearMeasurements = useCallback(() => {
     setMeasurements([]);
     toast({
-      title: "Mediciones limpiadas",
-      description: "Todas las mediciones han sido eliminadas",
+      title: 'Mediciones limpiadas',
+      description: 'Todas las mediciones han sido eliminadas',
     });
   }, [toast]);
 
-  const handleSnapModeChange = useCallback((mode: 'none' | 'vertex' | 'edge' | 'face') => {
-    setSnapMode(mode);
-    toast({
-      title: "Modo de snap cambiado",
-      description: `Snap: ${mode.toUpperCase()}`,
-    });
-  }, [toast]);
+  /* -------------------- Selección de objetos (para SectionBox) ------------- */
+  const handleObjectSelection = useCallback(
+    (object: THREE.Object3D | null) => {
+      setSelectedObject(object);
+      if (object && sectionBoxActive) {
+        toast({
+          title: 'Objeto seleccionado para sección',
+          description: 'Arrastra los controles triangulares para seccionar',
+        });
+      }
+    },
+    [sectionBoxActive, toast],
+  );
 
-  const handleObjectSelection = useCallback((object: THREE.Object3D | null) => {
-    setSelectedObject(object);
-    if (object && sectionBoxActive) {
+  /* -------------------- Activación herramientas ---------------------------- */
+  const handleSectionBoxToggle = useCallback(
+    (active: boolean) => {
+      setSectionBoxActive(active);
+      if (!active) {
+        setSelectedObject(null);
+      }
       toast({
-        title: "Objeto seleccionado para sección",
-        description: "Arrastra los controles triangulares para seccionar",
+        title: active
+          ? 'Herramienta de sección activada'
+          : 'Herramienta de sección desactivada',
+        description: active
+          ? 'Haz clic en un modelo para seleccionarlo y crear la caja'
+          : 'Planos de corte eliminados',
       });
-    }
-  }, [sectionBoxActive, toast]);
+    },
+    [toast],
+  );
 
-  const handleObjectHover = useCallback((object: THREE.Object3D | null) => {
-    // Only for visual feedback, no toast needed
-  }, []);
-
-  const handleSectionChange = useCallback((bounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
-    setSectionBounds(bounds);
-  }, []);
-
-  const handleSectionBoxToggle = useCallback((active: boolean) => {
-    setSectionBoxActive(active);
-    if (!active) {
-      setSelectedObject(null);
-      setSectionBounds(null);
-    }
-    
-    toast({
-      title: active ? "Herramienta de sección activada" : "Herramienta de sección desactivada",
-      description: active ? "Haz clic en un modelo para seleccionarlo y crear la caja de sección" : "Planos de corte eliminados",
-    });
-  }, [toast]);
-
-  // Handle measurement tool activation - disable section when measurement is active
   const handleMeasurementToggle = useCallback((active: boolean) => {
     setMeasurementActive(active);
     if (active) {
@@ -205,33 +194,29 @@ export const PointCloudViewer: React.FC = () => {
     }
   }, []);
 
+  /* -------------------------------------------------------------------------- */
+  /*  Escena interna (luces, modelos, etc.)                                     */
+  /* -------------------------------------------------------------------------- */
   const Scene = () => {
     const { scene } = useThree();
 
-    // Clear clipping planes when section box is deactivated
+    /* -- Limpiamos clipping cuando se desactiva la herramienta -------------- */
     useEffect(() => {
       if (!sectionBoxActive) {
-        // Remove clipping planes from all objects when deactivating
-        loadedFiles.forEach(file => {
+        loadedFiles.forEach((file) => {
           if (file.type === 'ifc') {
-            const ifcGeometry = file.data as IFCGeometry;
-            ifcGeometry.meshes.forEach(mesh => {
-              if (mesh.material) {
-                if (Array.isArray(mesh.material)) {
-                  mesh.material.forEach(mat => {
-                    mat.clippingPlanes = [];
-                    mat.needsUpdate = true;
-                  });
-                } else {
-                  mesh.material.clippingPlanes = [];
-                  mesh.material.needsUpdate = true;
-                }
-              }
+            (file.data as IFCGeometry).meshes.forEach((mesh) => {
+              const mats = Array.isArray(mesh.material)
+                ? mesh.material
+                : [mesh.material];
+              mats.forEach((mat) => {
+                mat.clippingPlanes = [];
+                mat.needsUpdate = true;
+              });
             });
           }
         });
 
-        // Also clear clipping from point clouds
         scene.traverse((child) => {
           if (child instanceof THREE.Points && child.material) {
             child.material.clippingPlanes = [];
@@ -244,11 +229,13 @@ export const PointCloudViewer: React.FC = () => {
     return (
       <>
         <color attach="background" args={['#1a1a1a']} />
-        
+
+        {/* Luces básicas */}
         <ambientLight intensity={0.4} />
         <directionalLight position={[10, 10, 5]} intensity={0.8} />
         <directionalLight position={[-10, -10, -5]} intensity={0.3} />
 
+        {/* Point-cloud */}
         {sampledPoints.length > 0 && (
           <PointCloud
             points={sampledPoints}
@@ -257,6 +244,7 @@ export const PointCloudViewer: React.FC = () => {
           />
         )}
 
+        {/* Modelos IFC */}
         {ifcModels.map((file) => (
           <IFCModel
             key={file.id}
@@ -265,59 +253,66 @@ export const PointCloudViewer: React.FC = () => {
           />
         ))}
 
-        {/* Object Selector for hover/selection effects - only active when section tool is on */}
+        {/* Selector de objetos (para Sección) */}
         <ObjectSelector
           isActive={sectionBoxActive}
-          onObjectHover={handleObjectHover}
+          onObjectHover={() => {}}
           onObjectSelect={handleObjectSelection}
         />
 
-        {/* Measurement Tool */}
+        {/* Herramienta de medición */}
         <MeasurementTool
           isActive={measurementActive}
           snapMode={snapMode}
           orthoMode={orthoMode}
           onMeasure={handleMeasurement}
-          onSnapModeChange={handleSnapModeChange}
+          onSnapModeChange={setSnapMode}
         />
 
-        {/* Section Box - only show when we have a specific selected object */}
+        {/* Caja de sección */}
         <SectionBox
           targetObject={selectedObject}
           isActive={sectionBoxActive}
-          onSectionChange={handleSectionChange}
           onDragStateChange={setIsDragging}
         />
 
-        <OrbitControls 
+        {/* Controles de cámara */}
+        <OrbitControls
           ref={controlsRef}
-          enablePan={true}
-          enableZoom={true}
-          enableRotate={true}
+          enablePan
+          enableZoom
+          enableRotate
           zoomSpeed={0.6}
           panSpeed={0.8}
           rotateSpeed={0.4}
           enabled={!isDragging}
         />
-        <Stats />
+
+        {/* Extras */}
         <axesHelper args={[10]} />
         <gridHelper args={[100, 100]} />
+        <Stats />
       </>
     );
   };
 
   /* -------------------------------------------------------------------------- */
-  /*  Renderizado                                                                */
+  /*  Render                                                                    */
   /* -------------------------------------------------------------------------- */
   return (
     <div className="w-full h-screen bg-gray-900 relative">
+      {/* ---------- Barra superior: botones y uploader ----------------------- */}
       <div className="absolute top-4 left-4 z-20 flex items-center gap-4">
-        <h1 className="text-2xl font-bold text-white">Visor de Nubes de Puntos</h1>
-        <FileUploader 
+        <h1 className="text-2xl font-bold text-white">
+          Visor de Nubes de Puntos
+        </h1>
+
+        <FileUploader
           onFileLoad={handleFileLoad}
           setIsLoading={setIsLoading}
           isLoading={isLoading}
         />
+
         {loadedFiles.length > 0 && (
           <button
             onClick={handleClear}
@@ -326,6 +321,7 @@ export const PointCloudViewer: React.FC = () => {
             Limpiar
           </button>
         )}
+
         <button
           onClick={resetCamera}
           className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
@@ -334,6 +330,7 @@ export const PointCloudViewer: React.FC = () => {
         </button>
       </div>
 
+      {/* ---------- Panel de ajustes ---------------------------------------- */}
       <ViewerControls
         density={density}
         setDensity={setDensity}
@@ -343,7 +340,9 @@ export const PointCloudViewer: React.FC = () => {
         setColorMode={setColorMode}
         transparency={transparency}
         setTransparency={setTransparency}
-        totalCount={loadedFiles.filter(f => f.type === 'pointcloud').reduce((acc, file) => acc + (file.data as Point[]).length, 0)}
+        totalCount={loadedFiles
+          .filter((f) => f.type === 'pointcloud')
+          .reduce((acc, f) => acc + (f.data as Point[]).length, 0)}
         visibleCount={sampledPoints.length}
         isVisible={controlsVisible}
         onToggleVisibility={() => setControlsVisible(!controlsVisible)}
@@ -351,6 +350,7 @@ export const PointCloudViewer: React.FC = () => {
         hasIFCModel={ifcModels.length > 0}
       />
 
+      {/* ---------- Herramientas ------------------------------------------- */}
       <ToolsPanel
         measurementActive={measurementActive}
         setMeasurementActive={handleMeasurementToggle}
@@ -364,19 +364,25 @@ export const PointCloudViewer: React.FC = () => {
         onClearMeasurements={handleClearMeasurements}
       />
 
+      {/* ---------- Overlay de carga --------------------------------------- */}
       {isLoading && (
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-30">
           <div className="bg-white p-6 rounded-lg shadow-lg">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-center">Cargando archivo...</p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4" />
+            <p className="text-center">Cargando archivo…</p>
           </div>
         </div>
       )}
 
+      {/* ---------- Canvas (Three.js) -------------------------------------- */}
       <Canvas
         camera={{ position: [50, 50, 50], fov: 60, near: 0.01, far: 100000 }}
         className="absolute inset-0"
-        gl={{ antialias: true, alpha: true, localClippingEnabled: true }}
+        gl={{ antialias: true, alpha: true }}
+        onCreated={({ gl }) => {
+          /* 🔑 Habilitamos el clipping local una sola vez */
+          gl.localClippingEnabled = true;
+        }}
       >
         <Scene />
       </Canvas>
