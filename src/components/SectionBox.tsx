@@ -1,4 +1,3 @@
-
 // src/components/SectionBox.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
@@ -130,10 +129,10 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   }, [bounds, isActive]);
 
   // 6) Iniciar arrastre (pointerDown sobre un cono)
-  const handlePointerDown = (event: React.PointerEvent, face: string) => {
+  const handlePointerDown = (event: any, face: string) => {
     if (!bounds) return;
     event.stopPropagation();
-    event.nativeEvent.stopImmediatePropagation();
+    event.nativeEvent?.stopImmediatePropagation?.();
 
     setIsDragging(true);
     setDragFace(face);
@@ -168,16 +167,16 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
 
     // Guardamos posición inicial y eje
     startPosition.current.set(0, 0, 0);
+    
+    // Use the pointer position from the Three.js event
+    const rect = gl.domElement.getBoundingClientRect();
+    const clientX = event.nativeEvent?.clientX || event.clientX || 0;
+    const clientY = event.nativeEvent?.clientY || event.clientY || 0;
+    
     raycaster.current.setFromCamera(
       new THREE.Vector2(
-        ((event.clientX - gl.domElement.getBoundingClientRect().left) /
-          gl.domElement.getBoundingClientRect().width) *
-          2 -
-          1,
-        (-(event.clientY - gl.domElement.getBoundingClientRect().top) /
-          gl.domElement.getBoundingClientRect().height) *
-          2 +
-          1,
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
       ),
       camera,
     );
