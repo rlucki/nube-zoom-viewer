@@ -205,6 +205,14 @@ export const PointCloudViewer: React.FC = () => {
           });
         }
       });
+
+      // Also clear clipping from point clouds
+      scene.traverse((child) => {
+        if (child instanceof THREE.Points && child.material) {
+          child.material.clippingPlanes = [];
+          child.material.needsUpdate = true;
+        }
+      });
     }
     
     toast({
@@ -250,7 +258,7 @@ export const PointCloudViewer: React.FC = () => {
           />
         ))}
 
-        {/* Object Selector for hover/selection effects - Only active when section tool is active */}
+        {/* Object Selector for hover/selection effects */}
         <ObjectSelector
           isActive={sectionBoxActive}
           onObjectHover={handleObjectHover}
@@ -266,9 +274,9 @@ export const PointCloudViewer: React.FC = () => {
           onSnapModeChange={handleSnapModeChange}
         />
 
-        {/* Section Box */}
+        {/* Section Box - get the entire scene when no specific object is selected */}
         <SectionBox
-          targetObject={selectedObject}
+          targetObject={selectedObject || (sectionBoxActive ? scene : null)}
           isActive={sectionBoxActive}
           onSectionChange={handleSectionChange}
         />
@@ -281,6 +289,7 @@ export const PointCloudViewer: React.FC = () => {
           zoomSpeed={0.6}
           panSpeed={0.8}
           rotateSpeed={0.4}
+          enabled={!isDragging}
         />
         <Stats />
         <axesHelper args={[10]} />
