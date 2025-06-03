@@ -173,38 +173,12 @@ export const PointCloudViewer: React.FC = () => {
   }, [sectionBoxActive, toast]);
 
   const handleObjectHover = useCallback((object: THREE.Object3D | null) => {
-    // Solo para feedback visual, no necesita toast
+    // Only for visual feedback, no toast needed
   }, []);
 
   const handleSectionChange = useCallback((bounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
     setSectionBounds(bounds);
-    
-    // Apply clipping planes to selected object
-    if (bounds && selectedObject) {
-      const clippingPlanes = [
-        new THREE.Plane(new THREE.Vector3(1, 0, 0), -bounds.min.x),
-        new THREE.Plane(new THREE.Vector3(-1, 0, 0), bounds.max.x),
-        new THREE.Plane(new THREE.Vector3(0, 1, 0), -bounds.min.y),
-        new THREE.Plane(new THREE.Vector3(0, -1, 0), bounds.max.y),
-        new THREE.Plane(new THREE.Vector3(0, 0, 1), -bounds.min.z),
-        new THREE.Plane(new THREE.Vector3(0, 0, -1), bounds.max.z),
-      ];
-
-      selectedObject.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material) {
-          if (Array.isArray(child.material)) {
-            child.material.forEach(mat => {
-              mat.clippingPlanes = clippingPlanes;
-              mat.needsUpdate = true;
-            });
-          } else {
-            child.material.clippingPlanes = clippingPlanes;
-            child.material.needsUpdate = true;
-          }
-        }
-      });
-    }
-  }, [selectedObject]);
+  }, []);
 
   const handleSectionBoxToggle = useCallback((active: boolean) => {
     setSectionBoxActive(active);
@@ -214,11 +188,7 @@ export const PointCloudViewer: React.FC = () => {
       
       // Remove clipping planes from all objects when deactivating
       loadedFiles.forEach(file => {
-        if (file.type === 'pointcloud') {
-          // Remove clipping from point clouds
-          const pointCloudObjects = [];
-          // Point clouds are handled in PointCloud component
-        } else if (file.type === 'ifc') {
+        if (file.type === 'ifc') {
           const ifcGeometry = file.data as IFCGeometry;
           ifcGeometry.meshes.forEach(mesh => {
             if (mesh.material) {
@@ -242,6 +212,15 @@ export const PointCloudViewer: React.FC = () => {
       description: active ? "Haz clic en un modelo para seleccionarlo" : "Planos de corte eliminados",
     });
   }, [loadedFiles, toast]);
+
+  // Handle measurement tool activation - disable section when measurement is active
+  const handleMeasurementToggle = useCallback((active: boolean) => {
+    setMeasurementActive(active);
+    if (active) {
+      setSectionBoxActive(false);
+      setSelectedObject(null);
+    }
+  }, []);
 
   /* -------------------------------------------------------------------------- */
   /*  Scene component to ensure proper initialization order                      */
@@ -271,9 +250,9 @@ export const PointCloudViewer: React.FC = () => {
           />
         ))}
 
-        {/* Object Selector for hover/selection effects - ALWAYS active when section tool is active */}
+        {/* Object Selector for hover/selection effects - Only active when section tool is active */}
         <ObjectSelector
-          isActive={sectionBoxActive || measurementActive}
+          isActive={sectionBoxActive}
           onObjectHover={handleObjectHover}
           onObjectSelect={handleObjectSelection}
         />
@@ -296,9 +275,9 @@ export const PointCloudViewer: React.FC = () => {
 
         <OrbitControls 
           ref={controlsRef}
-          enablePan={!dragState.current.isDragging}
-          enableZoom={!dragState.current.isDragging}
-          enableRotate={!dragState.current.isDragging}
+          enablePan={true}
+          enableZoom={true}
+          enableRotate={true}
           zoomSpeed={0.6}
           panSpeed={0.8}
           rotateSpeed={0.4}
@@ -357,7 +336,7 @@ export const PointCloudViewer: React.FC = () => {
 
       <ToolsPanel
         measurementActive={measurementActive}
-        setMeasurementActive={setMeasurementActive}
+        setMeasurementActive={handleMeasurementToggle}
         sectionBoxActive={sectionBoxActive}
         setSectionBoxActive={handleSectionBoxToggle}
         snapMode={snapMode}
