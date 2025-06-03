@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
@@ -43,7 +44,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   };
 
   /* ----------------------------------------------------------------------- */
-  /* 2. Hover, selección, restauración (sin cambios de lógica)               */
+  /* 2. Hover, selección, restauración                                       */
   /* ----------------------------------------------------------------------- */
   const restoreMaterial = (object: THREE.Object3D) => {
     object.traverse((child) => {
@@ -56,8 +57,52 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     });
   };
 
-  const applyHoverEffect = /* … idéntico a tu función … */;
-  const applySelectionEffect = /* … idéntico a tu función … */;
+  const applyHoverEffect = (object: THREE.Object3D) => {
+    object.traverse((child) => {
+      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+        // Guardar material original si no lo hemos hecho ya
+        if (!originalMaterials.current.has(child)) {
+          originalMaterials.current.set(child, (child as any).material);
+        }
+        
+        // Aplicar efecto hover (material más brillante)
+        const originalMat = originalMaterials.current.get(child)!;
+        if (Array.isArray(originalMat)) {
+          (child as any).material = originalMat.map((mat: any) => 
+            mat.clone ? new THREE.MeshBasicMaterial({ 
+              color: new THREE.Color(mat.color).multiplyScalar(1.5),
+              transparent: true,
+              opacity: 0.8 
+            }) : mat
+          );
+        } else {
+          (child as any).material = new THREE.MeshBasicMaterial({ 
+            color: new THREE.Color((originalMat as any).color || 0xffffff).multiplyScalar(1.5),
+            transparent: true,
+            opacity: 0.8 
+          });
+        }
+      }
+    });
+  };
+
+  const applySelectionEffect = (object: THREE.Object3D) => {
+    object.traverse((child) => {
+      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+        // Guardar material original si no lo hemos hecho ya
+        if (!originalMaterials.current.has(child)) {
+          originalMaterials.current.set(child, (child as any).material);
+        }
+        
+        // Aplicar efecto de selección (material naranja)
+        (child as any).material = new THREE.MeshBasicMaterial({ 
+          color: 0xff6600,
+          transparent: true,
+          opacity: 0.9 
+        });
+      }
+    });
+  };
 
   /* ----------------------------------------------------------------------- */
   /* 3. Mouse move → HOVER                                                   */
