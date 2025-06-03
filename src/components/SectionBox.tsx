@@ -1,4 +1,3 @@
-// src/components/SectionBox.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
@@ -6,13 +5,14 @@ import { useThree } from '@react-three/fiber';
 interface SectionBoxProps {
   targetObject: THREE.Object3D | null;
   isActive: boolean;
-  /** 
-   * Callback que notifica cuándo el usuario está arrastrando 
-   * (true = desactivar OrbitControls; false = reactivar OrbitControls)
+  /**
+   * Callback que notifica cuándo el usuario está arrastrando:
+   *  - true = desactivar OrbitControls
+   *  - false = reactivar OrbitControls
    */
   onDragStateChange?: (isDragging: boolean) => void;
   /**
-   * Callback que recibe los nuevos límites cada vez que cambian
+   * Callback que recibe los nuevos límites cada vez que cambian.
    */
   onSectionChange?: (bounds: { min: THREE.Vector3; max: THREE.Vector3 }) => void;
 }
@@ -23,7 +23,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   onDragStateChange,
   onSectionChange,
 }) => {
-  // Estados internos
+  // -------------- Estados internos --------------
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragFace, setDragFace] = useState<string | null>(null);
@@ -38,12 +38,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   // Hooks de Three.js
   const { camera, gl } = useThree();
 
-  // Notificar al padre cuándo empieza/termina el arrastre
+  // -------------- Notificar padre sobre el estado de arrastre --------------
   useEffect(() => {
     onDragStateChange?.(isDragging);
   }, [isDragging, onDragStateChange]);
 
-  // Calcular bounding box inicial cuando cambia targetObject o isActive
+  // -------------- Calcular bounding box inicial cuando cambian targetObject / isActive --------------
   useEffect(() => {
     if (targetObject && isActive && targetObject.type !== 'Scene') {
       const box = new THREE.Box3().setFromObject(targetObject);
@@ -73,7 +73,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   }, [targetObject, isActive]);
 
-  // Aplicar o quitar clipping planes cada vez que cambian los bounds o isActive
+  // -------------- Aplicar o quitar clipping planes cuando cambian bounds / isActive --------------
   useEffect(() => {
     if (bounds && targetObject && isActive && targetObject.type !== 'Scene') {
       // Creamos 6 planos de recorte usando los límites actuales
@@ -119,18 +119,15 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   }, [bounds, targetObject, isActive, onSectionChange]);
 
-  /**
-   * Handler para cuando se hace clic en alguno de los conos de control.
-   * - stopPropagation(): evita que OrbitControls capture el evento.
-   * - Desactiva OrbitControls informando al padre (onDragStateChange).
-   * - Prepara el dragPlane y guarda la posición inicial de intersección.
-   */
+  // -------------- PointerDown en los conos de control --------------
   const handlePointerDown = (event: any, face: string) => {
+    console.log('[SectionBox] pointerDown en cara:', face);
     if (!bounds) return;
 
     event.stopPropagation();
     setIsDragging(true);
     setDragFace(face);
+    console.log('[SectionBox] onDragStateChange(true)');
     onDragStateChange?.(true);
 
     // Definimos el plano de arrastre según la cara seleccionada
@@ -176,13 +173,9 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     raycaster.current.ray.intersectPlane(dragPlane.current, startPosition.current);
   };
 
-  /**
-   * Handler para cuando el ratón se mueve mientras arrastramos:
-   * - Calcula la nueva intersección
-   * - Obtiene el delta con respecto a la posición inicial
-   * - Ajusta bounds.min o bounds.max según la cara (dragFace)
-   */
+  // -------------- PointerMove mientras arrastramos --------------
   const handlePointerMove = (event: MouseEvent) => {
+    console.log('[SectionBox] pointerMove, isDragging:', isDragging, 'dragFace:', dragFace);
     if (!isDragging || !dragFace || !bounds) return;
 
     const rect = gl.domElement.getBoundingClientRect();
@@ -226,17 +219,16 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   };
 
-  /**
-   * Handler para cuando el usuario suelta el botón del ratón:
-   * - Reactiva OrbitControls informando al padre (onDragStateChange(false))
-   */
+  // -------------- PointerUp (fin de arrastre) --------------
   const handlePointerUp = () => {
+    console.log('[SectionBox] pointerUp, arrastre terminado');
     setIsDragging(false);
     setDragFace(null);
+    console.log('[SectionBox] onDragStateChange(false)');
     onDragStateChange?.(false);
   };
 
-  // Cuando isDragging = true, añadimos listeners globales para mousemove y mouseup
+  // -------------- Agregar listeners globales durante el arrastre --------------
   useEffect(() => {
     if (isDragging) {
       const canvas = gl.domElement;
@@ -252,28 +244,28 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   }, [isDragging, dragFace, bounds, gl.domElement]);
 
-  // Si no hay bounds, o no está activo, o target es la Escena, no renderizamos nada
+  // -------------- Si no hay bounds o la herramienta no está activa, no renderizar --------------
   if (!bounds || !isActive || !targetObject || targetObject.type === 'Scene') return null;
 
-  // Centramos el box y calculamos su tamaño
+  // Calculamos centro y tamaño del box
   const center = bounds.min.clone().lerp(bounds.max, 0.5);
   const size = bounds.max.clone().sub(bounds.min);
 
   return (
     <group ref={boxRef}>
-      {/** 1) Wireframe box **/}
+      {/* 1) Wireframe box */}
       <mesh position={center}>
         <boxGeometry args={[size.x, size.y, size.z]} />
         <meshBasicMaterial wireframe color="#00FFFF" transparent opacity={0.8} />
       </mesh>
 
-      {/** 2) Caras semitransparentes **/}
+      {/* 2) Caras semitransparentes */}
       <mesh position={center}>
         <boxGeometry args={[size.x, size.y, size.z]} />
         <meshBasicMaterial color="#00FFFF" transparent opacity={0.1} side={THREE.DoubleSide} />
       </mesh>
 
-      {/** 3) Handles de control (conos) en cada cara **/}
+      {/* 3) Handles de control (conos) en cada cara */}
       {[
         { face: 'x-min', position: [bounds.min.x, center.y, center.z], rotation: [0, 0,  Math.PI / 2] },
         { face: 'x-max', position: [bounds.max.x, center.y, center.z], rotation: [0, 0, -Math.PI / 2] },
@@ -301,12 +293,14 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
                 setHoveredHandle(null);
                 if (!isDragging) gl.domElement.style.cursor = 'default';
               }}
+              renderOrder={1000}            // Para que el cono quede encima de todo
             >
               <coneGeometry args={[2, 4, 8]} />
               <meshBasicMaterial
                 color={isDraggingThis ? '#FF0000' : (isHoveredThis ? '#FFA500' : '#0066FF')}
                 transparent
                 opacity={0.9}
+                depthTest={false}           // Evita que otras mallas tapen el cono
               />
             </mesh>
           </group>
