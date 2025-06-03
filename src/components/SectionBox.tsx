@@ -1,3 +1,4 @@
+// src/components/SectionBox.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
@@ -5,61 +6,69 @@ import { useThree } from '@react-three/fiber';
 interface SectionBoxProps {
   targetObject: THREE.Object3D | null;
   isActive: boolean;
-  /**
-   * Callback que notifica cuándo el usuario está arrastrando:
-   *  - true = desactivar OrbitControls
-   *  - false = reactivar OrbitControls
-   */
-  onDragStateChange?: (isDragging: boolean) => void;
-  /**
-   * Callback que recibe los nuevos límites cada vez que cambian.
-   */
   onSectionChange?: (bounds: { min: THREE.Vector3; max: THREE.Vector3 }) => void;
+  onDragStateChange?: (isDragging: boolean) => void;
 }
 
 export const SectionBox: React.FC<SectionBoxProps> = ({
   targetObject,
   isActive,
-  onDragStateChange,
   onSectionChange,
+  onDragStateChange,
 }) => {
-  // -------------- Estados internos --------------
+  // Estado local de los límites (bounds) de la caja
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
+  // Estado para saber si estamos arrastrando alguno de los “handles”
   const [isDragging, setIsDragging] = useState(false);
+  // Qué cara (handle) estamos arrastrando: 'x-min', 'x-max', 'y-min', etc.
   const [dragFace, setDragFace] = useState<string | null>(null);
+  // Si el cursor está encima (hover) de algún handle, para cambiar color
   const [hoveredHandle, setHoveredHandle] = useState<string | null>(null);
 
+  // Refs para mantener referencias a ciertos objetos Three.js
   const boxRef = useRef<THREE.Group>(null);
   const raycaster = useRef(new THREE.Raycaster());
   const dragPlane = useRef(new THREE.Plane());
   const intersection = useRef(new THREE.Vector3());
   const startPosition = useRef(new THREE.Vector3());
 
-  // Hooks de Three.js
+  // Necesitamos acceso a cámara y DOM del canvas
   const { camera, gl } = useThree();
 
-  // -------------- Notificar padre sobre el estado de arrastre --------------
+  // —————————————————————————————————————————————————————————
+  // 1) Marcar (una sola vez) todos los nodos como parte de la SectionBox
+  //    para que cualquier selector externo (ObjectSelector) los ignore.
+  // —————————————————————————————————————————————————————————
   useEffect(() => {
-    onDragStateChange?.(isDragging);
-  }, [isDragging, onDragStateChange]);
+    if (boxRef.current) {
+      boxRef.current.traverse((child) => {
+        (child as any).userData.isSectionBox = true;
+      });
+      // También marcamos la caja en sí
+      (boxRef.current as any).userData.isSectionBox = true;
+    }
+  }, []);
 
-  // -------------- Calcular bounding box inicial cuando cambian targetObject / isActive --------------
+  // —————————————————————————————————————————————————————————
+  // 2) Cuando targetObject o isActive cambian, recalculamos la caja envolvente
+  // —————————————————————————————————————————————————————————
   useEffect(() => {
     if (targetObject && isActive && targetObject.type !== 'Scene') {
-      const box = new THREE.Box3().setFromObject(targetObject);
+      const box3 = new THREE.Box3().setFromObject(targetObject);
 
-      if (!box.isEmpty()) {
-        // Expandimos un 10% para visualizar mejor los handles
-        const size = box.getSize(new THREE.Vector3());
+      if (!box3.isEmpty()) {
+        // Le damos un pequeño “margen” del 10% para no hacer clipping justo en la piel
+        const size = box3.getSize(new THREE.Vector3());
         const expansion = Math.max(size.x, size.y, size.z) * 0.1;
-        box.expandByScalar(expansion);
+        box3.expandByScalar(expansion);
 
         setBounds({
-          min: box.min.clone(),
-          max: box.max.clone(),
+          min: box3.min.clone(),
+          max: box3.max.clone(),
         });
       } else {
-        // Si no hay geometría, creamos un box alrededor del punto central
+        // Si el objeto no tenía geometría (box vacío),
+        // ponemos unos límites ficticios de ±10m alrededor de su posición
         const center = new THREE.Vector3();
         targetObject.getWorldPosition(center);
         setBounds({
@@ -67,73 +76,79 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
           max: new THREE.Vector3(center.x + 10, center.y + 10, center.z + 10),
         });
       }
+      console.log('[SectionBox] Bounds iniciales:', box3.min, box3.max);
     } else {
-      // Si no hay target válido o la herramienta está inactiva, limpiamos bounds
+      // Si desactivamos la sección o no hay objeto, ocultamos la caja
       setBounds(null);
     }
   }, [targetObject, isActive]);
 
-  // -------------- Aplicar o quitar clipping planes cuando cambian bounds / isActive --------------
+  // —————————————————————————————————————————————————————————
+  // 3) Cada vez que cambian los bounds, aplicamos los clipping planes
+  // —————————————————————————————————————————————————————————
   useEffect(() => {
     if (bounds && targetObject && isActive && targetObject.type !== 'Scene') {
-      // Creamos 6 planos de recorte usando los límites actuales
+      // Definimos los 6 planos que “recortan” fuera de [min..max]
       const clippingPlanes = [
-        new THREE.Plane(new THREE.Vector3(-1,  0,  0),  bounds.max.x),
-        new THREE.Plane(new THREE.Vector3( 1,  0,  0), -bounds.min.x),
-        new THREE.Plane(new THREE.Vector3( 0, -1,  0),  bounds.max.y),
-        new THREE.Plane(new THREE.Vector3( 0,  1,  0), -bounds.min.y),
-        new THREE.Plane(new THREE.Vector3( 0,  0, -1),  bounds.max.z),
-        new THREE.Plane(new THREE.Vector3( 0,  0,  1), -bounds.min.z),
+        new THREE.Plane(new THREE.Vector3(-1, 0, 0), bounds.max.x),
+        new THREE.Plane(new THREE.Vector3(1, 0, 0), -bounds.min.x),
+        new THREE.Plane(new THREE.Vector3(0, -1, 0), bounds.max.y),
+        new THREE.Plane(new THREE.Vector3(0, 1, 0), -bounds.min.y),
+        new THREE.Plane(new THREE.Vector3(0, 0, -1), bounds.max.z),
+        new THREE.Plane(new THREE.Vector3(0, 0, 1), -bounds.min.z),
       ];
 
-      // Recorremos todo el target para asignar los planos a cada material
+      // Recorremos recursivamente el objeto y todos sus hijos Mesh/Points
       targetObject.traverse((child) => {
         if (child instanceof THREE.Mesh && child.material) {
-          const materials = Array.isArray(child.material) ? child.material : [child.material];
-          materials.forEach((mat) => {
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          mats.forEach((mat) => {
             mat.clippingPlanes = clippingPlanes;
             mat.needsUpdate = true;
           });
         } else if (child instanceof THREE.Points && child.material) {
-          child.material.clippingPlanes = clippingPlanes;
-          child.material.needsUpdate = true;
+          (child.material as THREE.PointsMaterial).clippingPlanes = clippingPlanes;
+          (child.material as THREE.PointsMaterial).needsUpdate = true;
         }
       });
 
-      // Notificamos al padre que los bounds han cambiado
+      console.log('[SectionBox] Clipping aplicado. Bounds:', bounds.min, bounds.max);
       onSectionChange?.(bounds);
     } else if (targetObject && (!isActive || !bounds)) {
-      // Si no está activo o no hay bounds, removemos todos los clipping planes
+      // Si desactivamos la sección, limpiamos los clippingPlanes
       targetObject.traverse((child) => {
         if (child instanceof THREE.Mesh && child.material) {
-          const materials = Array.isArray(child.material) ? child.material : [child.material];
-          materials.forEach((mat) => {
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          mats.forEach((mat) => {
             mat.clippingPlanes = [];
             mat.needsUpdate = true;
           });
         } else if (child instanceof THREE.Points && child.material) {
-          child.material.clippingPlanes = [];
-          child.material.needsUpdate = true;
+          (child.material as THREE.PointsMaterial).clippingPlanes = [];
+          (child.material as THREE.PointsMaterial).needsUpdate = true;
         }
       });
+      console.log('[SectionBox] Clipping removido (sección inactiva).');
     }
   }, [bounds, targetObject, isActive, onSectionChange]);
 
-  // -------------- PointerDown en los conos de control --------------
-  const handlePointerDown = (event: any, face: string) => {
-    console.log('[SectionBox] pointerDown en cara:', face);
+  // —————————————————————————————————————————————————————————
+  // 4) Cuando se pulsa sobre uno de los conos: iniciamos el arrastre
+  // —————————————————————————————————————————————————————————
+  const handlePointerDown = (event: React.PointerEvent, face: string) => {
     if (!bounds) return;
+    event.stopPropagation();         // ¡IMPRESCINDIBLE! que ningún otro listener “cace” este evento
+    event.nativeEvent.stopImmediatePropagation();
 
-    event.stopPropagation();
+    // Indicamos que arrancamos el “drag”
     setIsDragging(true);
     setDragFace(face);
-    console.log('[SectionBox] onDragStateChange(true)');
     onDragStateChange?.(true);
 
-    // Definimos el plano de arrastre según la cara seleccionada
+    // Definimos un plano de arrastre según la cara que hemos clicado,
+    // para que el ratón solo influya en esa coordenada concreta:
     const normal = new THREE.Vector3();
-    const point = new THREE.Vector3();
-
+    const point  = new THREE.Vector3();
     switch (face) {
       case 'x-min':
         normal.set(1, 0, 0);
@@ -163,36 +178,39 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
 
     dragPlane.current.setFromNormalAndCoplanarPoint(normal, point);
 
-    // Calculamos la primera intersección sobre ese plano
+    // Calculamos la posición inicial del ratón sobre ese plano
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top)  / rect.height) * 2 + 1
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
     );
     raycaster.current.setFromCamera(mouse, camera);
     raycaster.current.ray.intersectPlane(dragPlane.current, startPosition.current);
+
+    console.log('[SectionBox] pointerDown en cara:', face, 'startPosition:', startPosition.current);
   };
 
-  // -------------- PointerMove mientras arrastramos --------------
+  // —————————————————————————————————————————————————————————
+  // 5) Cada vez que movemos el ratón mientras arrastramos
+  // —————————————————————————————————————————————————————————
   const handlePointerMove = (event: MouseEvent) => {
-    console.log('[SectionBox] pointerMove, isDragging:', isDragging, 'dragFace:', dragFace);
     if (!isDragging || !dragFace || !bounds) return;
 
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top)  / rect.height) * 2 + 1
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
     );
-
     raycaster.current.setFromCamera(mouse, camera);
+
+    // Si intersecta el plano de arrastre, obtenemos delta
     if (raycaster.current.ray.intersectPlane(dragPlane.current, intersection.current)) {
       const delta = intersection.current.clone().sub(startPosition.current);
       const newBounds = {
         min: bounds.min.clone(),
         max: bounds.max.clone(),
       };
-
-      const minSize = 1.0; // Tamaño mínimo para no invertir caras
+      const minSize = 0.1; // tamaño mínimo para no “colapsar” la caja
 
       switch (dragFace) {
         case 'x-min':
@@ -216,56 +234,76 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       }
 
       setBounds(newBounds);
+      console.log('[SectionBox] handlePointerMove, nuevo bounds:', newBounds.min, newBounds.max);
     }
   };
 
-  // -------------- PointerUp (fin de arrastre) --------------
-  const handlePointerUp = () => {
-    console.log('[SectionBox] pointerUp, arrastre terminado');
-    setIsDragging(false);
+  // —————————————————————————————————————————————————————————
+  // 6) Cuando soltamos el ratón, finalizamos el arrastre
+  // —————————————————————————————————————————————————————————
+  const handlePointerUp = (event: MouseEvent) => {
+    if (isDragging) {
+      setIsDragging(false);
+      onDragStateChange?.(false);
+      console.log('[SectionBox] pointerUp — arrastre finalizado.');
+    }
     setDragFace(null);
-    console.log('[SectionBox] onDragStateChange(false)');
-    onDragStateChange?.(false);
   };
 
-  // -------------- Agregar listeners globales durante el arrastre --------------
+  // —————————————————————————————————————————————————————————
+  // 7) Registramos / Eliminamos listeners globales mientras arrastramos
+  // —————————————————————————————————————————————————————————
   useEffect(() => {
     if (isDragging) {
       const canvas = gl.domElement;
-      canvas.addEventListener('mousemove', handlePointerMove);
-      canvas.addEventListener('mouseup',   handlePointerUp);
       canvas.style.cursor = 'grabbing';
+      canvas.addEventListener('pointermove', handlePointerMove);
+      canvas.addEventListener('pointerup', handlePointerUp);
 
       return () => {
-        canvas.removeEventListener('mousemove', handlePointerMove);
-        canvas.removeEventListener('mouseup',   handlePointerUp);
+        canvas.removeEventListener('pointermove', handlePointerMove);
+        canvas.removeEventListener('pointerup', handlePointerUp);
         canvas.style.cursor = 'default';
       };
     }
-  }, [isDragging, dragFace, bounds, gl.domElement]);
+  }, [isDragging, dragFace, bounds]);
 
-  // -------------- Si no hay bounds o la herramienta no está activa, no renderizar --------------
-  if (!bounds || !isActive || !targetObject || targetObject.type === 'Scene') return null;
+  // Si no hay bounds o sección inactiva, no renderizamos nada
+  if (!bounds || !isActive || !targetObject || targetObject.type === 'Scene') {
+    return null;
+  }
 
-  // Calculamos centro y tamaño del box
+  // Centro y tamaño de la caja, para situar correctamente la geometría
   const center = bounds.min.clone().lerp(bounds.max, 0.5);
-  const size = bounds.max.clone().sub(bounds.min);
+  const size   = bounds.max.clone().sub(bounds.min);
 
   return (
     <group ref={boxRef}>
-      {/* 1) Wireframe box */}
-      <mesh position={center}>
+      {/* —————— 1) Caja wireframe azul claro —————— */}
+      <mesh position={center} userData={{ isSectionBox: true }}>
         <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial wireframe color="#00FFFF" transparent opacity={0.8} />
+        <meshBasicMaterial
+          wireframe
+          color="#00FFFF"
+          transparent
+          opacity={0.8}
+          depthTest={false}
+        />
       </mesh>
 
-      {/* 2) Caras semitransparentes */}
-      <mesh position={center}>
+      {/* —————— 2) Caras semitransparentes —————— */}
+      <mesh position={center} userData={{ isSectionBox: true }}>
         <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial color="#00FFFF" transparent opacity={0.1} side={THREE.DoubleSide} />
+        <meshBasicMaterial
+          color="#00FFFF"
+          transparent
+          opacity={0.1}
+          side={THREE.DoubleSide}
+          depthTest={false}
+        />
       </mesh>
 
-      {/* 3) Handles de control (conos) en cada cara */}
+      {/* —————— 3) Conos de control (handles) —————— */}
       {[
         { face: 'x-min', position: [bounds.min.x, center.y, center.z], rotation: [0, 0,  Math.PI / 2] },
         { face: 'x-max', position: [bounds.max.x, center.y, center.z], rotation: [0, 0, -Math.PI / 2] },
@@ -274,33 +312,37 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
         { face: 'z-min', position: [center.x, center.y, bounds.min.z], rotation: [ Math.PI / 2, 0, 0  ] },
         { face: 'z-max', position: [center.x, center.y, bounds.max.z], rotation: [-Math.PI / 2, 0, 0  ] },
       ].map((handle) => {
-        const isHoveredThis = hoveredHandle === handle.face;
-        const isDraggingThis = isDragging && dragFace === handle.face;
+        const isHoveredThis  = hoveredHandle === handle.face;
+        const isDraggingThis = isDragging   && dragFace   === handle.face;
 
         return (
           <group
             key={handle.face}
             position={handle.position as [number, number, number]}
             rotation={handle.rotation as [number, number, number]}
+            userData={{ isSectionBox: true }}
           >
             <mesh
+              userData={{ isSectionBox: true }}
               onPointerDown={(e) => handlePointerDown(e, handle.face)}
-              onPointerEnter={() => {
+              onPointerEnter={(e) => {
+                e.stopPropagation();
                 setHoveredHandle(handle.face);
                 gl.domElement.style.cursor = 'grab';
               }}
-              onPointerLeave={() => {
+              onPointerLeave={(e) => {
+                e.stopPropagation();
                 setHoveredHandle(null);
                 if (!isDragging) gl.domElement.style.cursor = 'default';
               }}
-              renderOrder={1000}            // Para que el cono quede encima de todo
             >
-              <coneGeometry args={[2, 4, 8]} />
+              {/* Detalle: hacemos los conos MÁS PEQUEÑOS (radio=1, altura=2) */}
+              <coneGeometry args={[1, 2, 16]} />
               <meshBasicMaterial
                 color={isDraggingThis ? '#FF0000' : (isHoveredThis ? '#FFA500' : '#0066FF')}
                 transparent
                 opacity={0.9}
-                depthTest={false}           // Evita que otras mallas tapen el cono
+                depthTest={false}
               />
             </mesh>
           </group>
