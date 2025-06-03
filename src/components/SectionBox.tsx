@@ -227,7 +227,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
 
       // — Opcional: si quieres ver el corte en tiempo real mientras arrastras,
       //   descomenta esta línea (ten en cuenta que puede afectar el rendimiento):
-      // applyClippingPlanes(newBounds);
+      applyClippingPlanes(newBounds);
     }
   };
 
