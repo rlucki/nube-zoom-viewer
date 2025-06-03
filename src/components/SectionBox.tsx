@@ -69,36 +69,37 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   }, [targetObject, isActive]);
 
-  // 3) Función para crear y aplicar clipping planes
-  const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
-    if (!targetObject) return;
+// 3) Crear y aplicar clipping planes ───────────────
+const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
+  if (!targetObject) return;
 
-    // Seis planos (uno para cada cara del box)
-    const planes = [
-      new THREE.Plane(new THREE.Vector3(-1, 0, 0), newBounds.max.x),
-      new THREE.Plane(new THREE.Vector3(1, 0, 0), -newBounds.min.x),
-      new THREE.Plane(new THREE.Vector3(0, -1, 0), newBounds.max.y),
-      new THREE.Plane(new THREE.Vector3(0, 1, 0), -newBounds.min.y),
-      new THREE.Plane(new THREE.Vector3(0, 0, -1), newBounds.max.z),
-      new THREE.Plane(new THREE.Vector3(0, 0, 1), -newBounds.min.z),
-    ];
+  const makePlane = (n: THREE.Vector3, p: THREE.Vector3) =>
+    new THREE.Plane().setFromNormalAndCoplanarPoint(n, p).clone();
 
-    // Recorremos la jerarquía de targetObject y le asignamos planes a todos los materiales
-    targetObject.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material) {
-        const mats = Array.isArray(child.material) ? child.material : [child.material];
-        mats.forEach((mat) => {
-          mat.clippingPlanes = planes;
-          mat.needsUpdate = true;
-        });
-      } else if (child instanceof THREE.Points && child.material) {
-        (child.material as THREE.PointsMaterial).clippingPlanes = planes;
-        (child.material as THREE.PointsMaterial).needsUpdate = true;
-      }
-    });
+  const planes = [
+    /* -X */ makePlane(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(newBounds.min.x, 0, 0)),
+    /* +X */ makePlane(new THREE.Vector3( 1, 0, 0), new THREE.Vector3(newBounds.max.x, 0, 0)),
+    /* -Y */ makePlane(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, newBounds.min.y, 0)),
+    /* +Y */ makePlane(new THREE.Vector3(0,  1, 0), new THREE.Vector3(0, newBounds.max.y, 0)),
+    /* -Z */ makePlane(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, newBounds.min.z)),
+    /* +Z */ makePlane(new THREE.Vector3(0, 0,  1), new THREE.Vector3(0, 0, newBounds.max.z)),
+  ];
 
-    console.log('[SectionBox] Clipping aplicado:', newBounds.min, newBounds.max);
-  };
+  // Asignar los seis planos a todo hijo del objeto objetivo
+  targetObject.traverse((child) => {
+    if (
+      (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
+      child.material
+    ) {
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((mat: any) => {
+        mat.clippingPlanes = planes;
+        mat.needsUpdate = true;
+      });
+    }
+  });
+  console.log('[SectionBox] Clipping aplicado:', newBounds.min, newBounds.max);
+};
 
   // 4) Función para remover clipping planes
   const removeClippingPlanes = () => {
