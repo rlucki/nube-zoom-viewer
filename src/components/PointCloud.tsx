@@ -1,3 +1,4 @@
+
 // src/components/PointCloud.tsx
 import React, { useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -15,6 +16,9 @@ interface PointCloudProps {
   colorMode: 'rgb' | 'intensity' | 'height';
 }
 
+// Maximum number of points to prevent memory issues
+const MAX_POINTS = 1000000; // 1 million points max
+
 export const PointCloud: React.FC<PointCloudProps> = ({
   points,
   pointSize,
@@ -28,6 +32,54 @@ export const PointCloud: React.FC<PointCloudProps> = ({
    * cambian los puntos, el tamaño o el modo de color.
    */
   const { geometry, material } = useMemo(() => {
+    // Safety check: if no points or too many points, return empty geometry
+    if (!points || points.length === 0) {
+      console.log('No points to render');
+      const emptyGeometry = new THREE.BufferGeometry();
+      const material = new THREE.PointsMaterial({
+        size: pointSize * 0.1,
+        vertexColors: true,
+        sizeAttenuation: false,
+      });
+      return { geometry: emptyGeometry, material };
+    }
+
+    // Limit points to prevent memory allocation failures
+    const limitedPoints = points.length > MAX_POINTS ? points.slice(0, MAX_POINTS) : points;
+    
+    if (points.length > MAX_POINTS) {
+      console.warn(`Point cloud too large (${points.length} points). Limited to ${MAX_POINTS} points to prevent memory issues.`);
+    }
+
+    console.log(`Rendering ${limitedPoints.length} points`);
+
+    // Calculate required memory and check if it's reasonable
+    const requiredMemory = limitedPoints.length * 3 * 4 * 2; // positions + colors, 4 bytes per float
+    const maxMemory = 500 * 1024 * 1024; // 500MB limit
+    
+    if (requiredMemory > maxMemory) {
+      console.error(`Required memory (${(requiredMemory / 1024 / 1024).toFixed(2)}MB) exceeds limit. Reducing points further.`);
+      const safePointCount = Math.floor(maxMemory / (3 * 4 * 2));
+      const safePoints = limitedPoints.slice(0, safePointCount);
+      return createPointCloudGeometry(safePoints, pointSize, colorMode);
+    }
+
+    return createPointCloudGeometry(limitedPoints, pointSize, colorMode);
+  }, [points, pointSize, colorMode]);
+
+  // 8) Renderizamos el objeto THREE.Points:
+  return (
+    <points
+      ref={meshRef}
+      geometry={geometry}
+      material={material}
+      frustumCulled={false}  // evita que Three.js lo descarte si boundingSphere falla
+    />
+  );
+};
+
+function createPointCloudGeometry(points: Point[], pointSize: number, colorMode: 'rgb' | 'intensity' | 'height') {
+  try {
     // 1) Creamos los buffers para posiciones y colores:
     const positions = new Float32Array(points.length * 3);
     const colors    = new Float32Array(points.length * 3);
@@ -93,7 +145,7 @@ export const PointCloud: React.FC<PointCloudProps> = ({
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
 
-    // 5) Bounding Box → “cubo limitador”
+    // 5) Bounding Box → "cubo limitador"
     geometry.computeBoundingBox();
     if (geometry.boundingBox) {
       // Aquí se podría centrar la nube:
@@ -116,15 +168,15 @@ export const PointCloud: React.FC<PointCloudProps> = ({
     });
 
     return { geometry, material };
-  }, [points, pointSize, colorMode]);
-
-  // 8) Renderizamos el objeto THREE.Points:
-  return (
-    <points
-      ref={meshRef}
-      geometry={geometry}
-      material={material}
-      frustumCulled={false}  // evita que Three.js lo descarte si boundingSphere falla
-    />
-  );
-};
+  } catch (error) {
+    console.error('Error creating point cloud geometry:', error);
+    // Return empty geometry as fallback
+    const emptyGeometry = new THREE.BufferGeometry();
+    const material = new THREE.PointsMaterial({
+      size: pointSize * 0.1,
+      vertexColors: true,
+      sizeAttenuation: false,
+    });
+    return { geometry: emptyGeometry, material };
+  }
+}
