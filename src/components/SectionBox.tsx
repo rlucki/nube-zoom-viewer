@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
@@ -7,12 +6,14 @@ interface SectionBoxProps {
   targetObject: THREE.Object3D | null;
   isActive: boolean;
   onSectionChange?: (bounds: { min: THREE.Vector3; max: THREE.Vector3 }) => void;
+  onDragStateChange?: (isDragging: boolean) => void;
 }
 
 export const SectionBox: React.FC<SectionBoxProps> = ({
   targetObject,
   isActive,
   onSectionChange,
+  onDragStateChange,
 }) => {
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -20,11 +21,16 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   const [hoveredHandle, setHoveredHandle] = useState<string | null>(null);
 
   const boxRef = useRef<THREE.Group>(null);
-  const { camera, gl, scene } = useThree();
+  const { camera, gl } = useThree();
   const raycaster = useRef(new THREE.Raycaster());
   const dragPlane = useRef(new THREE.Plane());
   const intersection = useRef(new THREE.Vector3());
   const startPosition = useRef(new THREE.Vector3());
+
+  // Notify parent component about drag state changes
+  useEffect(() => {
+    onDragStateChange?.(isDragging);
+  }, [isDragging, onDragStateChange]);
 
   // Calculate initial bounding box
   useEffect(() => {

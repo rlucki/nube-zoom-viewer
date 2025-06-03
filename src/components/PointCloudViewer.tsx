@@ -63,6 +63,9 @@ export const PointCloudViewer: React.FC = () => {
   const { toast } = useToast();
   const controlsRef = useRef<any>(null);
   const dragState = useRef({ isDragging: false });
+  
+  // Add isDragging state for section box
+  const [isDragging, setIsDragging] = useState(false);
 
   /* -------------------------------------------------------------------------- */
   /*  Memorización de datos                                                      */
@@ -185,41 +188,13 @@ export const PointCloudViewer: React.FC = () => {
     if (!active) {
       setSelectedObject(null);
       setSectionBounds(null);
-      
-      // Remove clipping planes from all objects when deactivating
-      loadedFiles.forEach(file => {
-        if (file.type === 'ifc') {
-          const ifcGeometry = file.data as IFCGeometry;
-          ifcGeometry.meshes.forEach(mesh => {
-            if (mesh.material) {
-              if (Array.isArray(mesh.material)) {
-                mesh.material.forEach(mat => {
-                  mat.clippingPlanes = [];
-                  mat.needsUpdate = true;
-                });
-              } else {
-                mesh.material.clippingPlanes = [];
-                mesh.material.needsUpdate = true;
-              }
-            }
-          });
-        }
-      });
-
-      // Also clear clipping from point clouds
-      scene.traverse((child) => {
-        if (child instanceof THREE.Points && child.material) {
-          child.material.clippingPlanes = [];
-          child.material.needsUpdate = true;
-        }
-      });
     }
     
     toast({
       title: active ? "Herramienta de sección activada" : "Herramienta de sección desactivada",
       description: active ? "Haz clic en un modelo para seleccionarlo" : "Planos de corte eliminados",
     });
-  }, [loadedFiles, toast]);
+  }, [toast]);
 
   // Handle measurement tool activation - disable section when measurement is active
   const handleMeasurementToggle = useCallback((active: boolean) => {
@@ -230,10 +205,42 @@ export const PointCloudViewer: React.FC = () => {
     }
   }, []);
 
-  /* -------------------------------------------------------------------------- */
-  /*  Scene component to ensure proper initialization order                      */
-  /* -------------------------------------------------------------------------- */
   const Scene = () => {
+    const { scene } = useThree();
+
+    // Clear clipping planes when section box is deactivated
+    useEffect(() => {
+      if (!sectionBoxActive) {
+        // Remove clipping planes from all objects when deactivating
+        loadedFiles.forEach(file => {
+          if (file.type === 'ifc') {
+            const ifcGeometry = file.data as IFCGeometry;
+            ifcGeometry.meshes.forEach(mesh => {
+              if (mesh.material) {
+                if (Array.isArray(mesh.material)) {
+                  mesh.material.forEach(mat => {
+                    mat.clippingPlanes = [];
+                    mat.needsUpdate = true;
+                  });
+                } else {
+                  mesh.material.clippingPlanes = [];
+                  mesh.material.needsUpdate = true;
+                }
+              }
+            });
+          }
+        });
+
+        // Also clear clipping from point clouds
+        scene.traverse((child) => {
+          if (child instanceof THREE.Points && child.material) {
+            child.material.clippingPlanes = [];
+            child.material.needsUpdate = true;
+          }
+        });
+      }
+    }, [sectionBoxActive, loadedFiles, scene]);
+
     return (
       <>
         <color attach="background" args={['#1a1a1a']} />
@@ -279,6 +286,7 @@ export const PointCloudViewer: React.FC = () => {
           targetObject={selectedObject || (sectionBoxActive ? scene : null)}
           isActive={sectionBoxActive}
           onSectionChange={handleSectionChange}
+          onDragStateChange={setIsDragging}
         />
 
         <OrbitControls 
