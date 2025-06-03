@@ -6,14 +6,10 @@ import { useThree } from '@react-three/fiber';
 /*  Props                                                                     */
 /* -------------------------------------------------------------------------- */
 interface ObjectSelectorProps {
-  /** Herramienta de selección activa */
-  isActive: boolean;
-  /** La SectionBox está en drag → deshabilita hover/click */
-  isDragging?: boolean;
-  /** Callback al pasar el ratón                              */
-  onObjectHover?:  (object: THREE.Object3D | null) => void;
-  /** Callback al hacer click / seleccionar                   */
-  onObjectSelect?: (object: THREE.Object3D | null) => void;
+  isActive: boolean;                   // herramienta encendida
+  isDragging?: boolean;                // la SectionBox está en drag
+  onObjectHover?:  (obj: THREE.Object3D | null) => void;
+  onObjectSelect?: (obj: THREE.Object3D | null) => void;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -27,109 +23,79 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 }) => {
   const { camera, scene, gl } = useThree();
 
-  const [hoveredObject,  setHoveredObject]  = useState<THREE.Object3D | null>(null);
-  const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
+  const [hovered,  setHovered ]  = useState<THREE.Object3D | null>(null);
+  const [selected, setSelected]  = useState<THREE.Object3D | null>(null);
 
-  /* Mapa con materiales originales para restaurar luego */
-  const originalMaterials = useRef(
+  const originals = useRef(
     new Map<THREE.Mesh | THREE.Points, THREE.Material | THREE.Material[]>(),
   );
   const raycaster = useRef(new THREE.Raycaster());
 
   /* ---------------------------------------------------------------------- */
-  /* 1. Objetos sobre los que SÍ queremos hacer raycast                      */
+  /* 1. Filtrar objetos válidos para raycast                                 */
   /* ---------------------------------------------------------------------- */
-  const getIntersectableObjects = (): THREE.Object3D[] => {
+  const getPickables = (): THREE.Object3D[] => {
     const list: THREE.Object3D[] = [];
-    scene.traverse((child) => {
+    scene.traverse((c) => {
       if (
-        (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
-        !(child.userData as any).isSectionBox &&
-        !child.name.includes('helper') &&
-        !child.name.includes('grid') &&
-        !child.name.includes('axes') &&
-        !(child.userData as any).isUI
+        (c instanceof THREE.Mesh || c instanceof THREE.Points) &&
+        !(c.userData as any).isSectionBox &&    // fuera de la caja
+        !c.name.match(/helper|grid|axes/) &&
+        !(c.userData as any).isUI
       ) {
-        list.push(child);
+        list.push(c);
       }
     });
     return list;
   };
 
   /* ---------------------------------------------------------------------- */
-  /* 2. Utilidades: restaurar / hover / selección                            */
+  /* 2. Utils: restaurar / hover / selección                                 */
   /* ---------------------------------------------------------------------- */
-  const restoreMaterial = (object: THREE.Object3D) => {
-    object.traverse((child) => {
+  const restoreMaterial = (obj: THREE.Object3D) => {
+    obj.traverse((c) => {
       if (
-        (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
-        originalMaterials.current.has(child)
+        (c instanceof THREE.Mesh || c instanceof THREE.Points) &&
+        originals.current.has(c)
       ) {
-        (child as any).material = originalMaterials.current.get(child)!;
+        (c as any).material = originals.current.get(c)!;
       }
     });
   };
 
-  const applyHoverEffect = (object: THREE.Object3D) => {
-    object.traverse((child) => {
-      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-        if (!originalMaterials.current.has(child)) {
-          originalMaterials.current.set(child, (child as any).material);
-        }
+  const setTempMaterial = (obj: THREE.Object3D, color: THREE.ColorRepresentation) => {
+    obj.traverse((c) => {
+      if (c instanceof THREE.Mesh || c instanceof THREE.Points) {
+        if (!originals.current.has(c)) originals.current.set(c, (c as any).material);
 
-        const mat = (child as any).material;
-        const hoverMat = Array.isArray(mat)
-          ? mat.map((m: any) =>
-              new THREE.MeshBasicMaterial({
-                color: new THREE.Color(m.color ?? 0xffffff).multiplyScalar(1.5),
-                transparent: true,
-                opacity: 0.8,
-              }),
-            )
-          : new THREE.MeshBasicMaterial({
-              color: new THREE.Color(mat.color ?? 0xffffff).multiplyScalar(1.5),
-              transparent: true,
-              opacity: 0.8,
-            });
-
-        (child as any).material = hoverMat;
-      }
-    });
-  };
-
-  const applySelectionEffect = (object: THREE.Object3D) => {
-    object.traverse((child) => {
-      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-        if (!originalMaterials.current.has(child)) {
-          originalMaterials.current.set(child, (child as any).material);
-        }
-        (child as any).material = new THREE.MeshBasicMaterial({
-          color: 0xff6600,
-          transparent: true,
-          opacity: 0.9,
+        (c as any).material = new THREE.MeshBasicMaterial({
+          color,
+          transparent : true,
+          opacity     : 0.8,
+          depthWrite  : false,
         });
       }
     });
   };
 
   /* ---------------------------------------------------------------------- */
-  /* 3. Mouse move → HOVER                                                  */
+  /* 3. Mouse-move → HOVER                                                  */
   /* ---------------------------------------------------------------------- */
-  const handleMouseMove = (event: MouseEvent) => {
+  const onMouseMove = (ev: MouseEvent) => {
     if (!isActive || isDragging) return;
-    if (selectedObject) return; // con objeto ya seleccionado, ignoramos hover
+    if (selected) return;
 
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+      -((ev.clientY - rect.top) / rect.height) * 2 + 1,
     );
 
     raycaster.current.setFromCamera(mouse, camera);
-    const picks = raycaster.current.intersectObjects(getIntersectableObjects(), true);
+    const hits = raycaster.current.intersectObjects(getPickables(), true);
 
-    if (picks.length) {
-      let obj = picks[0].object;
+    if (hits.length) {
+      let obj = hits[0].object;
       while (
         obj.parent &&
         obj.parent.type !== 'Scene' &&
@@ -139,16 +105,16 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         obj = obj.parent;
       }
 
-      if (obj !== hoveredObject) {
-        if (hoveredObject) restoreMaterial(hoveredObject);
-        applyHoverEffect(obj);
-        setHoveredObject(obj);
+      if (obj !== hovered) {
+        if (hovered) restoreMaterial(hovered);
+        setTempMaterial(obj, 0x80c2ff);         // azul claro para hover
+        setHovered(obj);
         onObjectHover?.(obj);
         gl.domElement.style.cursor = 'pointer';
       }
     } else {
-      if (hoveredObject) restoreMaterial(hoveredObject);
-      setHoveredObject(null);
+      if (hovered) restoreMaterial(hovered);
+      setHovered(null);
       onObjectHover?.(null);
       gl.domElement.style.cursor = 'default';
     }
@@ -157,45 +123,45 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   /* ---------------------------------------------------------------------- */
   /* 4. Click → SELECCIÓN                                                   */
   /* ---------------------------------------------------------------------- */
-  const handleMouseClick = () => {
+  const onMouseClick = () => {
     if (!isActive || isDragging) return;
-    if (selectedObject) return;
+    if (selected) return;
 
-    if (hoveredObject) {
-      applySelectionEffect(hoveredObject);
-      setSelectedObject(hoveredObject);
-      onObjectSelect?.(hoveredObject);
+    if (hovered) {
+      setTempMaterial(hovered, 0xff6600);       // naranja para selección
+      setSelected(hovered);
+      onObjectSelect?.(hovered);
     }
   };
 
   /* ---------------------------------------------------------------------- */
-  /* 5. Registrar / quitar listeners                                        */
+  /* 5. (De)registrar listeners                                             */
   /* ---------------------------------------------------------------------- */
   useEffect(() => {
     if (isActive && !isDragging) {
       const canvas = gl.domElement;
-      canvas.addEventListener('mousemove', handleMouseMove);
-      canvas.addEventListener('click', handleMouseClick);
+      canvas.addEventListener('mousemove', onMouseMove);
+      canvas.addEventListener('click',     onMouseClick);
       return () => {
-        canvas.removeEventListener('mousemove', handleMouseMove);
-        canvas.removeEventListener('click', handleMouseClick);
+        canvas.removeEventListener('mousemove', onMouseMove);
+        canvas.removeEventListener('click',     onMouseClick);
         gl.domElement.style.cursor = 'default';
       };
     }
-  }, [isActive, isDragging, hoveredObject, selectedObject, gl.domElement]);
+  }, [isActive, isDragging, hovered, selected, gl.domElement]);
 
   /* ---------------------------------------------------------------------- */
-  /* 6. Reset visual cuando desactivamos la tool                            */
+  /* 6. Reset al desactivar la herramienta                                  */
   /* ---------------------------------------------------------------------- */
   useEffect(() => {
     if (!isActive) {
-      if (hoveredObject) restoreMaterial(hoveredObject);
-      if (selectedObject) restoreMaterial(selectedObject);
-      setHoveredObject(null);
-      setSelectedObject(null);
+      if (hovered)  restoreMaterial(hovered);
+      if (selected) restoreMaterial(selected);
+      setHovered(null);
+      setSelected(null);
       gl.domElement.style.cursor = 'default';
     }
   }, [isActive]);
 
-  return null; // no renderiza nada en la escena
+  return null; // — no renderiza nada
 };
