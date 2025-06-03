@@ -69,23 +69,25 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   }, [targetObject, isActive]);
 
-// 3) Crear y aplicar clipping planes ───────────────
+// 3) Crear y aplicar clipping planes
 const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
   if (!targetObject) return;
 
-  const makePlane = (n: THREE.Vector3, p: THREE.Vector3) =>
+  // Helper
+  const plane = (n: THREE.Vector3, p: THREE.Vector3) =>
     new THREE.Plane().setFromNormalAndCoplanarPoint(n, p).clone();
 
+  // Normales apuntando hacia el centro
   const planes = [
-    /* -X */ makePlane(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(newBounds.min.x, 0, 0)),
-    /* +X */ makePlane(new THREE.Vector3( 1, 0, 0), new THREE.Vector3(newBounds.max.x, 0, 0)),
-    /* -Y */ makePlane(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, newBounds.min.y, 0)),
-    /* +Y */ makePlane(new THREE.Vector3(0,  1, 0), new THREE.Vector3(0, newBounds.max.y, 0)),
-    /* -Z */ makePlane(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, newBounds.min.z)),
-    /* +Z */ makePlane(new THREE.Vector3(0, 0,  1), new THREE.Vector3(0, 0, newBounds.max.z)),
+    /*  X ≥ minX */ plane(new THREE.Vector3( 1, 0, 0), new THREE.Vector3(newBounds.min.x, 0, 0)),
+    /*  X ≤ maxX */ plane(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(newBounds.max.x, 0, 0)),
+    /*  Y ≥ minY */ plane(new THREE.Vector3(0,  1, 0), new THREE.Vector3(0, newBounds.min.y, 0)),
+    /*  Y ≤ maxY */ plane(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, newBounds.max.y, 0)),
+    /*  Z ≥ minZ */ plane(new THREE.Vector3(0, 0,  1), new THREE.Vector3(0, 0, newBounds.min.z)),
+    /*  Z ≤ maxZ */ plane(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, newBounds.max.z)),
   ];
 
-  // Asignar los seis planos a todo hijo del objeto objetivo
+  // Asignar los planos e INTERSECTARLOS
   targetObject.traverse((child) => {
     if (
       (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
@@ -93,13 +95,16 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
     ) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       mats.forEach((mat: any) => {
-        mat.clippingPlanes = planes;
-        mat.needsUpdate = true;
+        mat.clippingPlanes    = planes;
+        mat.clipIntersection  = true;   // 👈  ¡esta línea hace la magia!
+        mat.needsUpdate       = true;
       });
     }
   });
+
   console.log('[SectionBox] Clipping aplicado:', newBounds.min, newBounds.max);
 };
+
 
   // 4) Función para remover clipping planes
   const removeClippingPlanes = () => {
