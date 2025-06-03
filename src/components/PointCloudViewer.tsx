@@ -192,7 +192,7 @@ export const PointCloudViewer: React.FC = () => {
     
     toast({
       title: active ? "Herramienta de sección activada" : "Herramienta de sección desactivada",
-      description: active ? "Haz clic en un modelo para seleccionarlo" : "Planos de corte eliminados",
+      description: active ? "Haz clic en un modelo para seleccionarlo y crear la caja de sección" : "Planos de corte eliminados",
     });
   }, [toast]);
 
@@ -265,7 +265,7 @@ export const PointCloudViewer: React.FC = () => {
           />
         ))}
 
-        {/* Object Selector for hover/selection effects */}
+        {/* Object Selector for hover/selection effects - only active when section tool is on */}
         <ObjectSelector
           isActive={sectionBoxActive}
           onObjectHover={handleObjectHover}
@@ -281,9 +281,9 @@ export const PointCloudViewer: React.FC = () => {
           onSnapModeChange={handleSnapModeChange}
         />
 
-        {/* Section Box - get the entire scene when no specific object is selected */}
+        {/* Section Box - only show when we have a specific selected object */}
         <SectionBox
-          targetObject={selectedObject || (sectionBoxActive ? scene : null)}
+          targetObject={selectedObject}
           isActive={sectionBoxActive}
           onSectionChange={handleSectionChange}
           onDragStateChange={setIsDragging}

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
@@ -32,15 +33,15 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     onDragStateChange?.(isDragging);
   }, [isDragging, onDragStateChange]);
 
-  // Calculate initial bounding box
+  // Calculate initial bounding box ONLY when we have a specific target object
   useEffect(() => {
-    if (targetObject && isActive) {
+    if (targetObject && isActive && targetObject.type !== 'Scene') {
       const box = new THREE.Box3().setFromObject(targetObject);
       
       if (!box.isEmpty()) {
-        // Expand the box slightly
+        // Expand the box slightly for better visualization
         const size = box.getSize(new THREE.Vector3());
-        const expansion = Math.max(size.x, size.y, size.z) * 0.05;
+        const expansion = Math.max(size.x, size.y, size.z) * 0.1;
         box.expandByScalar(expansion);
         
         setBounds({
@@ -48,22 +49,23 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
           max: box.max.clone(),
         });
       } else {
-        // Default bounds if object has no geometry
+        // Fallback bounds if object has no geometry
         const center = new THREE.Vector3();
         targetObject.getWorldPosition(center);
         setBounds({
-          min: new THREE.Vector3(center.x - 5, center.y - 5, center.z - 5),
-          max: new THREE.Vector3(center.x + 5, center.y + 5, center.z + 5),
+          min: new THREE.Vector3(center.x - 10, center.y - 10, center.z - 10),
+          max: new THREE.Vector3(center.x + 10, center.y + 10, center.z + 10),
         });
       }
     } else {
+      // Clear bounds when no specific object is selected or tool is inactive
       setBounds(null);
     }
   }, [targetObject, isActive]);
 
-  // Apply clipping planes
+  // Apply clipping planes only when we have bounds and a valid target
   useEffect(() => {
-    if (bounds && targetObject && isActive) {
+    if (bounds && targetObject && isActive && targetObject.type !== 'Scene') {
       const clippingPlanes = [
         new THREE.Plane(new THREE.Vector3(-1, 0, 0), bounds.max.x),
         new THREE.Plane(new THREE.Vector3(1, 0, 0), -bounds.min.x),
@@ -88,8 +90,8 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       });
 
       onSectionChange?.(bounds);
-    } else if (targetObject && !isActive) {
-      // Clear clipping planes
+    } else if (targetObject && (!isActive || !bounds)) {
+      // Clear clipping planes when tool is inactive or no bounds
       targetObject.traverse((child) => {
         if (child instanceof THREE.Mesh && child.material) {
           const materials = Array.isArray(child.material) ? child.material : [child.material];
@@ -109,6 +111,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     if (!bounds) return;
 
     event.stopPropagation();
+    
     setIsDragging(true);
     setDragFace(face);
 
@@ -146,30 +149,26 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     dragPlane.current.setFromNormalAndCoplanarPoint(normal, point);
     
     // Get initial intersection point
-    raycaster.current.setFromCamera(
-      new THREE.Vector2(
-        (event.clientX / gl.domElement.clientWidth) * 2 - 1,
-        -(event.clientY / gl.domElement.clientHeight) * 2 + 1
-      ),
-      camera
+    const rect = gl.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
     );
     
+    raycaster.current.setFromCamera(mouse, camera);
     raycaster.current.ray.intersectPlane(dragPlane.current, startPosition.current);
   };
 
-  const handlePointerMove = (event: any) => {
+  const handlePointerMove = (event: MouseEvent) => {
     if (!isDragging || !dragFace || !bounds) return;
 
-    event.stopPropagation();
-
-    // Get current intersection
-    raycaster.current.setFromCamera(
-      new THREE.Vector2(
-        (event.clientX / gl.domElement.clientWidth) * 2 - 1,
-        -(event.clientY / gl.domElement.clientHeight) * 2 + 1
-      ),
-      camera
+    const rect = gl.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
     );
+
+    raycaster.current.setFromCamera(mouse, camera);
 
     if (raycaster.current.ray.intersectPlane(dragPlane.current, intersection.current)) {
       const delta = intersection.current.clone().sub(startPosition.current);
@@ -178,7 +177,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
         max: bounds.max.clone(),
       };
 
-      const minSize = 0.1;
+      const minSize = 1.0; // Minimum size to prevent invalid bounds
 
       switch (dragFace) {
         case 'x-min':
@@ -214,19 +213,20 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   useEffect(() => {
     if (isDragging) {
       const canvas = gl.domElement;
-      canvas.addEventListener('pointermove', handlePointerMove);
-      canvas.addEventListener('pointerup', handlePointerUp);
+      canvas.addEventListener('mousemove', handlePointerMove);
+      canvas.addEventListener('mouseup', handlePointerUp);
       canvas.style.cursor = 'grabbing';
 
       return () => {
-        canvas.removeEventListener('pointermove', handlePointerMove);
-        canvas.removeEventListener('pointerup', handlePointerUp);
+        canvas.removeEventListener('mousemove', handlePointerMove);
+        canvas.removeEventListener('mouseup', handlePointerUp);
         canvas.style.cursor = 'default';
       };
     }
-  }, [isDragging, dragFace, bounds]);
+  }, [isDragging, dragFace, bounds, gl.domElement]);
 
-  if (!bounds || !isActive) return null;
+  // Only render if we have bounds, the tool is active, and we have a specific target (not Scene)
+  if (!bounds || !isActive || !targetObject || targetObject.type === 'Scene') return null;
 
   const center = bounds.min.clone().lerp(bounds.max, 0.5);
   const size = bounds.max.clone().sub(bounds.min);
@@ -274,7 +274,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
                 if (!isDragging) gl.domElement.style.cursor = 'default';
               }}
             >
-              <coneGeometry args={[1.5, 3, 8]} />
+              <coneGeometry args={[2, 4, 8]} />
               <meshBasicMaterial 
                 color={isDraggingThis ? "#FF0000" : (isHovered ? "#FFA500" : "#0066FF")} 
                 transparent 

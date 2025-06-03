@@ -19,19 +19,19 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
   const originalMaterials = useRef(new Map<THREE.Mesh | THREE.Points, THREE.Material | THREE.Material[]>());
   const localRaycaster = useRef(new THREE.Raycaster());
-  const localMouse = useRef(new THREE.Vector2());
 
   // Función para obtener objetos intersectables (IFC y point clouds)
   const getIntersectableObjects = (): THREE.Object3D[] => {
     const intersectable: THREE.Object3D[] = [];
     scene.traverse((child) => {
       if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-        // Excluir helpers y UI elements
+        // Excluir helpers, UI elements, y section box
         if (!child.name.includes('helper') && 
             !child.name.includes('grid') && 
             !child.name.includes('axes') &&
             !child.name.includes('section') &&
-            !child.userData.isUI) {
+            !child.userData.isUI &&
+            !child.userData.isSectionBox) {
           intersectable.push(child);
         }
       }
@@ -43,12 +43,10 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   const applyHoverEffect = (object: THREE.Object3D) => {
     object.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        // Guardar material original si no se ha guardado
         if (!originalMaterials.current.has(child)) {
           originalMaterials.current.set(child, child.material);
         }
 
-        // Crear material de hover
         const hoverMaterial = Array.isArray(child.material) 
           ? child.material.map(mat => mat.clone())
           : child.material.clone();
@@ -56,10 +54,10 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         if (Array.isArray(hoverMaterial)) {
           hoverMaterial.forEach(mat => {
             if ('color' in mat) {
-              mat.color.multiplyScalar(1.3); // Hacer más brillante
+              mat.color.multiplyScalar(1.3);
             }
             if ('emissive' in mat) {
-              mat.emissive.setRGB(0.1, 0.1, 0.2); // Añadir brillo azul
+              mat.emissive.setRGB(0.1, 0.1, 0.2);
             }
           });
         } else {
@@ -73,13 +71,12 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 
         child.material = hoverMaterial;
       } else if (child instanceof THREE.Points) {
-        // Para point clouds, cambiar el color del material
         if (!originalMaterials.current.has(child)) {
           originalMaterials.current.set(child, child.material);
         }
         
         const hoverMaterial = (child.material as THREE.PointsMaterial).clone();
-        hoverMaterial.color.setRGB(0.5, 0.8, 1.0); // Color azul claro
+        hoverMaterial.color.setRGB(0.5, 0.8, 1.0);
         child.material = hoverMaterial;
       }
     });
@@ -89,12 +86,10 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   const applySelectionEffect = (object: THREE.Object3D) => {
     object.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        // Guardar material original si no se ha guardado
         if (!originalMaterials.current.has(child)) {
           originalMaterials.current.set(child, child.material);
         }
 
-        // Crear material de selección
         const selectedMaterial = Array.isArray(child.material) 
           ? child.material.map(mat => mat.clone())
           : child.material.clone();
@@ -105,7 +100,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
               mat.color.multiplyScalar(1.5);
             }
             if ('emissive' in mat) {
-              mat.emissive.setRGB(0.2, 0.4, 0.0); // Brillo verde
+              mat.emissive.setRGB(0.2, 0.4, 0.0);
             }
           });
         } else {
@@ -124,7 +119,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         }
         
         const selectedMaterial = (child.material as THREE.PointsMaterial).clone();
-        selectedMaterial.color.setRGB(0.2, 1.0, 0.2); // Color verde claro
+        selectedMaterial.color.setRGB(0.2, 1.0, 0.2);
         child.material = selectedMaterial;
       }
     });
@@ -144,17 +139,22 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     if (!isActive) return;
 
     const rect = gl.domElement.getBoundingClientRect();
-    localMouse.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    localMouse.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
 
-    localRaycaster.current.setFromCamera(localMouse.current, camera);
+    localRaycaster.current.setFromCamera(mouse, camera);
     const intersectable = getIntersectableObjects();
     const intersects = localRaycaster.current.intersectObjects(intersectable, true);
 
     if (intersects.length > 0) {
       // Encontrar el objeto padre más relevante
       let newHoveredObject = intersects[0].object;
-      while (newHoveredObject.parent && newHoveredObject.parent.type !== 'Scene') {
+      while (newHoveredObject.parent && 
+             newHoveredObject.parent.type !== 'Scene' &&
+             !(newHoveredObject.parent instanceof THREE.Points) &&
+             !(newHoveredObject.parent instanceof THREE.Mesh)) {
         newHoveredObject = newHoveredObject.parent;
       }
 
@@ -202,16 +202,17 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 
   useEffect(() => {
     if (isActive) {
-      gl.domElement.addEventListener('mousemove', handleMouseMove);
-      gl.domElement.addEventListener('click', handleMouseClick);
-    }
+      const canvas = gl.domElement;
+      canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('click', handleMouseClick);
 
-    return () => {
-      gl.domElement.removeEventListener('mousemove', handleMouseMove);
-      gl.domElement.removeEventListener('click', handleMouseClick);
-      gl.domElement.style.cursor = 'default';
-    };
-  }, [isActive, hoveredObject, selectedObject]);
+      return () => {
+        canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('click', handleMouseClick);
+        canvas.style.cursor = 'default';
+      };
+    }
+  }, [isActive, hoveredObject, selectedObject, gl.domElement]);
 
   // Limpiar efectos cuando se desactiva
   useEffect(() => {
@@ -227,5 +228,5 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     }
   }, [isActive]);
 
-  return null; // Este componente no renderiza nada visible
+  return null;
 };
