@@ -128,59 +128,92 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   }, [bounds, isActive]);
 
-  // 6) Iniciar arrastre (pointerDown sobre un cono)
-  const handlePointerDown = (event: React.PointerEvent, face: string) => {
-    if (!bounds) return;
-    event.stopPropagation();
-    event.nativeEvent.stopImmediatePropagation();
+ // 6) Iniciar arrastre (pointerDown sobre un cono)
+const handlePointerDown = (event: React.PointerEvent, face: string) => {
+  if (!bounds) return;
+  event.stopPropagation();
+  event.nativeEvent.stopImmediatePropagation();
 
-    setIsDragging(true);
-    setDragFace(face);
-    onDragStateChange?.(true);
-    console.log('[SectionBox] pointerDown en cara:', face);
+  setIsDragging(true);
+  setDragFace(face);
+  onDragStateChange?.(true);
 
-    // Definimos normal y punto del plano según la cara
-    const normal = new THREE.Vector3();
-    const point  = new THREE.Vector3();
-    switch (face) {
-      case 'x-min':
-        normal.set(1, 0, 0);
-        point.set(bounds.min.x, 0, 0);
-        break;
-      case 'x-max':
-        normal.set(1, 0, 0);
-        point.set(bounds.max.x, 0, 0);
-        break;
-      case 'y-min':
-        normal.set(0, 1, 0);
-        point.set(0, bounds.min.y, 0);
-        break;
-      case 'y-max':
-        normal.set(0, 1, 0);
-        point.set(0, bounds.max.y, 0);
-        break;
-      case 'z-min':
-        normal.set(0, 0, 1);
-        point.set(0, 0, bounds.min.z);
-        break;
-      case 'z-max':
-        normal.set(0, 0, 1);
-        point.set(0, 0, bounds.max.z);
-        break;
-    }
+- // Definimos normal y punto del plano según la cara
+- const normal = new THREE.Vector3();
+- const point  = new THREE.Vector3();
+- switch (face) {
+-   case 'x-min': normal.set( 1, 0, 0); point.set(bounds.min.x, 0, 0); break;
+-   …
+- }
+-
+- dragPlane.current.setFromNormalAndCoplanarPoint(normal, point);
++ // ① El plano de arrastre es paralelo a la cámara
++ const planeNormal = camera.getWorldDirection(new THREE.Vector3()).normalize();
++ // Pasa por la posición del handle
++ dragPlane.current.setFromNormalAndCoplanarPoint(
++   planeNormal,
++   new THREE.Vector3(...event.object.getWorldPosition(new THREE.Vector3()).toArray())
++ );
++
++ // ② Vector del eje de movimiento
++ const axis = ((): THREE.Vector3 => {
++   switch (face) {
++     case 'x-min':
++     case 'x-max': return new THREE.Vector3(1, 0, 0);
++     case 'y-min':
++     case 'y-max': return new THREE.Vector3(0, 1, 0);
++     default:      return new THREE.Vector3(0, 0, 1); // z-min / z-max
++   }
++ })().normalize();
++
++ // Guardamos posición inicial y eje
++ startPosition.current.set(0, 0, 0);
++ raycaster.current.setFromCamera(
++   new THREE.Vector2(
++     ((event.clientX - gl.domElement.getBoundingClientRect().left) /
++       gl.domElement.getBoundingClientRect().width) *
++       2 -
++       1,
++     (-(event.clientY - gl.domElement.getBoundingClientRect().top) /
++       gl.domElement.getBoundingClientRect().height) *
++       2 +
++       1,
++   ),
++   camera,
++ );
++ raycaster.current.ray.intersectPlane(dragPlane.current, startPosition.current);
++
++ // Guardamos también el eje para usarlo en pointerMove
++ (dragPlane.current as any).axis = axis;
+};
 
-    dragPlane.current.setFromNormalAndCoplanarPoint(normal, point);
+// 7) Durante el arrastre (pointerMove)
+const handlePointerMove = (event: MouseEvent) => {
+  if (!isDragging || !dragFace || !bounds) return;
 
-    // Calculamos la intersección inicial del ratón con el plano
-    const rect = gl.domElement.getBoundingClientRect();
-    const mouse = new THREE.Vector2(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1
-    );
-    raycaster.current.setFromCamera(mouse, camera);
-    raycaster.current.ray.intersectPlane(dragPlane.current, startPosition.current);
-    console.log('[SectionBox] startPosition del arrastre:', startPosition.current);
-  };
+  …
+-   const delta = intersection.current.clone().sub(startPosition.current);
++   const delta = intersection.current
++     .clone()
++     .sub(startPosition.current);            // movimiento completo
++   const axis  = (dragPlane.current as any).axis as THREE.Vector3;
++   const move  = delta.dot(axis);            // proyección sobre el eje
++
++   const newBounds = {
++     min: bounds.min.clone(),
++     max: bounds.max.clone(),
++   };
++   const minSize = 0.1;
++
++   switch (dragFace) {
++     case 'x-min': newBounds.min.x = Math.min(bounds.min.x + move, newBounds.max.x - minSize); break;
++     case 'x-max': newBounds.max.x = Math.max(bounds.max.x + move, newBounds.min.x + minSize); break;
++     case 'y-min': newBounds.min.y = Math.min(bounds.min.y + move, newBounds.max.y - minSize); break;
++     case 'y-max': newBounds.max.y = Math.max(bounds.max.y + move, newBounds.min.y + minSize); break;
++     case 'z-min': newBounds.min.z = Math.min(bounds.min.z + move, newBounds.max.z - minSize); break;
++     case 'z-max': newBounds.max.z = Math.max(bounds.max.z + move, newBounds.min.z + minSize); break;
++   }
+
 
   // 7) Durante el arrastre (pointerMove), sólo actualizamos “bounds”.
   const handlePointerMove = (event: MouseEvent) => {
