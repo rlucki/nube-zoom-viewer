@@ -1,3 +1,4 @@
+
 // src/components/SectionBox.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
@@ -128,94 +129,65 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   }, [bounds, isActive]);
 
- // 6) Iniciar arrastre (pointerDown sobre un cono)
-const handlePointerDown = (event: React.PointerEvent, face: string) => {
-  if (!bounds) return;
-  event.stopPropagation();
-  event.nativeEvent.stopImmediatePropagation();
+  // 6) Iniciar arrastre (pointerDown sobre un cono)
+  const handlePointerDown = (event: React.PointerEvent, face: string) => {
+    if (!bounds) return;
+    event.stopPropagation();
+    event.nativeEvent.stopImmediatePropagation();
 
-  setIsDragging(true);
-  setDragFace(face);
-  onDragStateChange?.(true);
+    setIsDragging(true);
+    setDragFace(face);
+    onDragStateChange?.(true);
 
-- // Definimos normal y punto del plano según la cara
-- const normal = new THREE.Vector3();
-- const point  = new THREE.Vector3();
-- switch (face) {
--   case 'x-min': normal.set( 1, 0, 0); point.set(bounds.min.x, 0, 0); break;
--   …
-- }
--
-- dragPlane.current.setFromNormalAndCoplanarPoint(normal, point);
-+ // ① El plano de arrastre es paralelo a la cámara
-+ const planeNormal = camera.getWorldDirection(new THREE.Vector3()).normalize();
-+ // Pasa por la posición del handle
-+ dragPlane.current.setFromNormalAndCoplanarPoint(
-+   planeNormal,
-+   new THREE.Vector3(...event.object.getWorldPosition(new THREE.Vector3()).toArray())
-+ );
-+
-+ // ② Vector del eje de movimiento
-+ const axis = ((): THREE.Vector3 => {
-+   switch (face) {
-+     case 'x-min':
-+     case 'x-max': return new THREE.Vector3(1, 0, 0);
-+     case 'y-min':
-+     case 'y-max': return new THREE.Vector3(0, 1, 0);
-+     default:      return new THREE.Vector3(0, 0, 1); // z-min / z-max
-+   }
-+ })().normalize();
-+
-+ // Guardamos posición inicial y eje
-+ startPosition.current.set(0, 0, 0);
-+ raycaster.current.setFromCamera(
-+   new THREE.Vector2(
-+     ((event.clientX - gl.domElement.getBoundingClientRect().left) /
-+       gl.domElement.getBoundingClientRect().width) *
-+       2 -
-+       1,
-+     (-(event.clientY - gl.domElement.getBoundingClientRect().top) /
-+       gl.domElement.getBoundingClientRect().height) *
-+       2 +
-+       1,
-+   ),
-+   camera,
-+ );
-+ raycaster.current.ray.intersectPlane(dragPlane.current, startPosition.current);
-+
-+ // Guardamos también el eje para usarlo en pointerMove
-+ (dragPlane.current as any).axis = axis;
-};
+    // El plano de arrastre es paralelo a la cámara
+    const planeNormal = camera.getWorldDirection(new THREE.Vector3()).normalize();
+    
+    // Pasa por la posición del handle
+    const handlePosition = new THREE.Vector3();
+    switch (face) {
+      case 'x-min': handlePosition.set(bounds.min.x, (bounds.min.y + bounds.max.y) / 2, (bounds.min.z + bounds.max.z) / 2); break;
+      case 'x-max': handlePosition.set(bounds.max.x, (bounds.min.y + bounds.max.y) / 2, (bounds.min.z + bounds.max.z) / 2); break;
+      case 'y-min': handlePosition.set((bounds.min.x + bounds.max.x) / 2, bounds.min.y, (bounds.min.z + bounds.max.z) / 2); break;
+      case 'y-max': handlePosition.set((bounds.min.x + bounds.max.x) / 2, bounds.max.y, (bounds.min.z + bounds.max.z) / 2); break;
+      case 'z-min': handlePosition.set((bounds.min.x + bounds.max.x) / 2, (bounds.min.y + bounds.max.y) / 2, bounds.min.z); break;
+      case 'z-max': handlePosition.set((bounds.min.x + bounds.max.x) / 2, (bounds.min.y + bounds.max.y) / 2, bounds.max.z); break;
+    }
+    
+    dragPlane.current.setFromNormalAndCoplanarPoint(planeNormal, handlePosition);
 
-// 7) Durante el arrastre (pointerMove)
-const handlePointerMove = (event: MouseEvent) => {
-  if (!isDragging || !dragFace || !bounds) return;
+    // Vector del eje de movimiento
+    const axis = ((): THREE.Vector3 => {
+      switch (face) {
+        case 'x-min':
+        case 'x-max': return new THREE.Vector3(1, 0, 0);
+        case 'y-min':
+        case 'y-max': return new THREE.Vector3(0, 1, 0);
+        default:      return new THREE.Vector3(0, 0, 1); // z-min / z-max
+      }
+    })().normalize();
 
-  …
--   const delta = intersection.current.clone().sub(startPosition.current);
-+   const delta = intersection.current
-+     .clone()
-+     .sub(startPosition.current);            // movimiento completo
-+   const axis  = (dragPlane.current as any).axis as THREE.Vector3;
-+   const move  = delta.dot(axis);            // proyección sobre el eje
-+
-+   const newBounds = {
-+     min: bounds.min.clone(),
-+     max: bounds.max.clone(),
-+   };
-+   const minSize = 0.1;
-+
-+   switch (dragFace) {
-+     case 'x-min': newBounds.min.x = Math.min(bounds.min.x + move, newBounds.max.x - minSize); break;
-+     case 'x-max': newBounds.max.x = Math.max(bounds.max.x + move, newBounds.min.x + minSize); break;
-+     case 'y-min': newBounds.min.y = Math.min(bounds.min.y + move, newBounds.max.y - minSize); break;
-+     case 'y-max': newBounds.max.y = Math.max(bounds.max.y + move, newBounds.min.y + minSize); break;
-+     case 'z-min': newBounds.min.z = Math.min(bounds.min.z + move, newBounds.max.z - minSize); break;
-+     case 'z-max': newBounds.max.z = Math.max(bounds.max.z + move, newBounds.min.z + minSize); break;
-+   }
+    // Guardamos posición inicial y eje
+    startPosition.current.set(0, 0, 0);
+    raycaster.current.setFromCamera(
+      new THREE.Vector2(
+        ((event.clientX - gl.domElement.getBoundingClientRect().left) /
+          gl.domElement.getBoundingClientRect().width) *
+          2 -
+          1,
+        (-(event.clientY - gl.domElement.getBoundingClientRect().top) /
+          gl.domElement.getBoundingClientRect().height) *
+          2 +
+          1,
+      ),
+      camera,
+    );
+    raycaster.current.ray.intersectPlane(dragPlane.current, startPosition.current);
 
+    // Guardamos también el eje para usarlo en pointerMove
+    (dragPlane.current as any).axis = axis;
+  };
 
-  // 7) Durante el arrastre (pointerMove), sólo actualizamos “bounds”.
+  // 7) Durante el arrastre (pointerMove)
   const handlePointerMove = (event: MouseEvent) => {
     if (!isDragging || !dragFace || !bounds) return;
 
@@ -227,39 +199,31 @@ const handlePointerMove = (event: MouseEvent) => {
     raycaster.current.setFromCamera(mouse, camera);
 
     if (raycaster.current.ray.intersectPlane(dragPlane.current, intersection.current)) {
-      const delta = intersection.current.clone().sub(startPosition.current);
+      const delta = intersection.current
+        .clone()
+        .sub(startPosition.current);            // movimiento completo
+      const axis = (dragPlane.current as any).axis as THREE.Vector3;
+      const move = delta.dot(axis);            // proyección sobre el eje
+
       const newBounds = {
         min: bounds.min.clone(),
         max: bounds.max.clone(),
       };
-      const minSize = 0.1; // Evitar que la caja desaparezca completamente
+      const minSize = 0.1;
 
       switch (dragFace) {
-        case 'x-min':
-          newBounds.min.x = Math.min(bounds.min.x + delta.x, newBounds.max.x - minSize);
-          break;
-        case 'x-max':
-          newBounds.max.x = Math.max(bounds.max.x + delta.x, newBounds.min.x + minSize);
-          break;
-        case 'y-min':
-          newBounds.min.y = Math.min(bounds.min.y + delta.y, newBounds.max.y - minSize);
-          break;
-        case 'y-max':
-          newBounds.max.y = Math.max(bounds.max.y + delta.y, newBounds.min.y + minSize);
-          break;
-        case 'z-min':
-          newBounds.min.z = Math.min(bounds.min.z + delta.z, newBounds.max.z - minSize);
-          break;
-        case 'z-max':
-          newBounds.max.z = Math.max(bounds.max.z + delta.z, newBounds.min.z + minSize);
-          break;
+        case 'x-min': newBounds.min.x = Math.min(bounds.min.x + move, newBounds.max.x - minSize); break;
+        case 'x-max': newBounds.max.x = Math.max(bounds.max.x + move, newBounds.min.x + minSize); break;
+        case 'y-min': newBounds.min.y = Math.min(bounds.min.y + move, newBounds.max.y - minSize); break;
+        case 'y-max': newBounds.max.y = Math.max(bounds.max.y + move, newBounds.min.y + minSize); break;
+        case 'z-min': newBounds.min.z = Math.min(bounds.min.z + move, newBounds.max.z - minSize); break;
+        case 'z-max': newBounds.max.z = Math.max(bounds.max.z + move, newBounds.min.z + minSize); break;
       }
 
       setBounds(newBounds);
       console.log('[SectionBox] handlePointerMove → bounds actualizados:', newBounds.min, newBounds.max);
 
-      // — Opcional: si quieres ver el corte en tiempo real mientras arrastras,
-      //   descomenta esta línea (ten en cuenta que puede afectar el rendimiento):
+      // Aplicamos el clipping en tiempo real mientras arrastras
       applyClippingPlanes(newBounds);
     }
   };
