@@ -16,48 +16,53 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   onSectionChange,
   onDragStateChange,
 }) => {
-  // Estado local de los límites (bounds) de la caja
+  // ───────────────────────────────────────────────────────────────
+  // Estado local: si hemos calculado unos bounds válidos y estables
+  // ───────────────────────────────────────────────────────────────
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
-  // Estado para saber si estamos arrastrando alguno de los “handles”
+  // Durante un arrastre (pointerDown → pointerUp)
   const [isDragging, setIsDragging] = useState(false);
-  // Qué cara (handle) estamos arrastrando: 'x-min', 'x-max', 'y-min', etc.
+  // Qué cara estamos arrastrando
   const [dragFace, setDragFace] = useState<string | null>(null);
-  // Si el cursor está encima (hover) de algún handle, para cambiar color
+  // Para realzar con color cuando pasamos el ratón sobre un cono
   const [hoveredHandle, setHoveredHandle] = useState<string | null>(null);
 
-  // Refs para mantener referencias a ciertos objetos Three.js
+  // Referencias para operaciones de Three.js
   const boxRef = useRef<THREE.Group>(null);
   const raycaster = useRef(new THREE.Raycaster());
   const dragPlane = useRef(new THREE.Plane());
   const intersection = useRef(new THREE.Vector3());
   const startPosition = useRef(new THREE.Vector3());
 
-  // Necesitamos acceso a cámara y DOM del canvas
   const { camera, gl } = useThree();
 
-  // —————————————————————————————————————————————————————————
-  // 1) Marcar (una sola vez) todos los nodos como parte de la SectionBox
-  //    para que cualquier selector externo (ObjectSelector) los ignore.
-  // —————————————————————————————————————————————————————————
+  // ───────────────────────────────────────────────────────────────
+  // 1) MARCAR UNA ÚNICA VEZ todos los nodos como parte de SectionBox
+  //    (para que ObjectSelector u otros raycasters los ignoren)
+  // ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (boxRef.current) {
       boxRef.current.traverse((child) => {
         (child as any).userData.isSectionBox = true;
       });
-      // También marcamos la caja en sí
       (boxRef.current as any).userData.isSectionBox = true;
+      console.log('[SectionBox] Todos los nodos marcados isSectionBox=true');
     }
   }, []);
 
-  // —————————————————————————————————————————————————————————
-  // 2) Cuando targetObject o isActive cambian, recalculamos la caja envolvente
-  // —————————————————————————————————————————————————————————
+  // ───────────────────────────────────────────────────────────────
+  // 2) CALCULAR bounds Iniciales cuando targetObject cambia O al
+  //    activarse el tool por primera vez. Esto solo se hace
+  //    _una vez_ al activarse, no queremos volver a recalcular
+  //    en cada render.
+  // ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (targetObject && isActive && targetObject.type !== 'Scene') {
+      // Creamos un Box3 desde el objeto
       const box3 = new THREE.Box3().setFromObject(targetObject);
 
       if (!box3.isEmpty()) {
-        // Le damos un pequeño “margen” del 10% para no hacer clipping justo en la piel
+        // Le añadimos un pequeño margen para no clippear justo contra la piel
         const size = box3.getSize(new THREE.Vector3());
         const expansion = Math.max(size.x, size.y, size.z) * 0.1;
         box3.expandByScalar(expansion);
@@ -66,89 +71,112 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
           min: box3.min.clone(),
           max: box3.max.clone(),
         });
+        console.log('[SectionBox] Bounds iniciales calculados:', box3.min, box3.max);
       } else {
-        // Si el objeto no tenía geometría (box vacío),
-        // ponemos unos límites ficticios de ±10m alrededor de su posición
+        // Si no tiene geometría (Box vacío), ponemos ±10 metros genéricos
         const center = new THREE.Vector3();
         targetObject.getWorldPosition(center);
         setBounds({
           min: new THREE.Vector3(center.x - 10, center.y - 10, center.z - 10),
           max: new THREE.Vector3(center.x + 10, center.y + 10, center.z + 10),
         });
+        console.log('[SectionBox] Bounds de fallback (sin geometría):', center);
       }
-      console.log('[SectionBox] Bounds iniciales:', box3.min, box3.max);
-    } else {
-      // Si desactivamos la sección o no hay objeto, ocultamos la caja
-      setBounds(null);
+
+      // NOTA: NO limpiamos bounds aquí cuando desactivamos.
+      //  Queremos mantenerlos hasta que el usuario haga pointerUp
     }
   }, [targetObject, isActive]);
 
-  // —————————————————————————————————————————————————————————
-  // 3) Cada vez que cambian los bounds, aplicamos los clipping planes
-  // —————————————————————————————————————————————————————————
+  // ───────────────────────────────────────────────────────────────
+  // 3) APLICAR clipping‐planes: lo haremos _solo_ cuando termine
+  //    el arrastre (pointerUp), no en cada mínimo cambio.
+  // ───────────────────────────────────────────────────────────────
+  const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
+    if (!targetObject) return;
+
+    const planes = [
+      new THREE.Plane(new THREE.Vector3(-1, 0, 0), newBounds.max.x),
+      new THREE.Plane(new THREE.Vector3(1, 0, 0), -newBounds.min.x),
+      new THREE.Plane(new THREE.Vector3(0, -1, 0), newBounds.max.y),
+      new THREE.Plane(new THREE.Vector3(0, 1, 0), -newBounds.min.y),
+      new THREE.Plane(new THREE.Vector3(0, 0, -1), newBounds.max.z),
+      new THREE.Plane(new THREE.Vector3(0, 0, 1), -newBounds.min.z),
+    ];
+
+    targetObject.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((mat) => {
+          mat.clippingPlanes = planes;
+          mat.needsUpdate = true;
+        });
+      } else if (child instanceof THREE.Points && child.material) {
+        (child.material as THREE.PointsMaterial).clippingPlanes = planes;
+        (child.material as THREE.PointsMaterial).needsUpdate = true;
+      }
+    });
+
+    console.log('[SectionBox] Clipping aplicado:', newBounds.min, newBounds.max);
+  };
+
+  // ───────────────────────────────────────────────────────────────
+  // 4) REMOVER clipping‐planes: cuando la sección se desactiva
+  //    o cuando necesitamos resetear la visualización.
+  // ───────────────────────────────────────────────────────────────
+  const removeClippingPlanes = () => {
+    if (!targetObject) return;
+
+    targetObject.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((mat) => {
+          mat.clippingPlanes = [];
+          mat.needsUpdate = true;
+        });
+      } else if (child instanceof THREE.Points && child.material) {
+        (child.material as THREE.PointsMaterial).clippingPlanes = [];
+        (child.material as THREE.PointsMaterial).needsUpdate = true;
+      }
+    });
+
+    console.log('[SectionBox] Clipping removido (sección inactiva o reseteo).');
+  };
+
+  // ───────────────────────────────────────────────────────────────
+  // 5) Cada vez que cambian bounds (pero _no_ mientras se arrastra),
+  //    dejamos que el usuario llame explícitamente a applyClipping
+  //    en el pointerUp. Así no “parpadea” continuamente.
+  // ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (bounds && targetObject && isActive && targetObject.type !== 'Scene') {
-      // Definimos los 6 planos que “recortan” fuera de [min..max]
-      const clippingPlanes = [
-        new THREE.Plane(new THREE.Vector3(-1, 0, 0), bounds.max.x),
-        new THREE.Plane(new THREE.Vector3(1, 0, 0), -bounds.min.x),
-        new THREE.Plane(new THREE.Vector3(0, -1, 0), bounds.max.y),
-        new THREE.Plane(new THREE.Vector3(0, 1, 0), -bounds.min.y),
-        new THREE.Plane(new THREE.Vector3(0, 0, -1), bounds.max.z),
-        new THREE.Plane(new THREE.Vector3(0, 0, 1), -bounds.min.z),
-      ];
-
-      // Recorremos recursivamente el objeto y todos sus hijos Mesh/Points
-      targetObject.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material) {
-          const mats = Array.isArray(child.material) ? child.material : [child.material];
-          mats.forEach((mat) => {
-            mat.clippingPlanes = clippingPlanes;
-            mat.needsUpdate = true;
-          });
-        } else if (child instanceof THREE.Points && child.material) {
-          (child.material as THREE.PointsMaterial).clippingPlanes = clippingPlanes;
-          (child.material as THREE.PointsMaterial).needsUpdate = true;
-        }
-      });
-
-      console.log('[SectionBox] Clipping aplicado. Bounds:', bounds.min, bounds.max);
-      onSectionChange?.(bounds);
-    } else if (targetObject && (!isActive || !bounds)) {
-      // Si desactivamos la sección, limpiamos los clippingPlanes
-      targetObject.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material) {
-          const mats = Array.isArray(child.material) ? child.material : [child.material];
-          mats.forEach((mat) => {
-            mat.clippingPlanes = [];
-            mat.needsUpdate = true;
-          });
-        } else if (child instanceof THREE.Points && child.material) {
-          (child.material as THREE.PointsMaterial).clippingPlanes = [];
-          (child.material as THREE.PointsMaterial).needsUpdate = true;
-        }
-      });
-      console.log('[SectionBox] Clipping removido (sección inactiva).');
+    if (!isDragging && bounds && isActive) {
+      // Cuando bounds cambian y no estamos “en medio de un drag”,
+      // no hacemos nada. Espera hasta pointerUp.
     }
-  }, [bounds, targetObject, isActive, onSectionChange]);
+    // Si la sección se desactiva o bounds se vuelven nulos, quitamos clipping
+    if (!isActive || !bounds) {
+      removeClippingPlanes();
+    }
+  }, [bounds, isDragging, isActive]);
 
-  // —————————————————————————————————————————————————————————
-  // 4) Cuando se pulsa sobre uno de los conos: iniciamos el arrastre
-  // —————————————————————————————————————————————————————————
+  // ───────────────────────────────────────────────────────────────
+  // 6) Iniciar arrastre: al pulsar sobre un cono
+  // ───────────────────────────────────────────────────────────────
   const handlePointerDown = (event: React.PointerEvent, face: string) => {
     if (!bounds) return;
-    event.stopPropagation();         // ¡IMPRESCINDIBLE! que ningún otro listener “cace” este evento
+    // Muy importante: parar propagación para que ningún otro raycaster (ObjectSelector, OrbitControls)
+    // interfiera con este evento.
+    event.stopPropagation();
     event.nativeEvent.stopImmediatePropagation();
 
-    // Indicamos que arrancamos el “drag”
     setIsDragging(true);
     setDragFace(face);
     onDragStateChange?.(true);
+    console.log('[SectionBox] pointerDown en cara:', face);
 
-    // Definimos un plano de arrastre según la cara que hemos clicado,
-    // para que el ratón solo influya en esa coordenada concreta:
+    // Definimos el plano de arrastre según la cara clicada:
     const normal = new THREE.Vector3();
-    const point  = new THREE.Vector3();
+    const point = new THREE.Vector3();
     switch (face) {
       case 'x-min':
         normal.set(1, 0, 0);
@@ -178,7 +206,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
 
     dragPlane.current.setFromNormalAndCoplanarPoint(normal, point);
 
-    // Calculamos la posición inicial del ratón sobre ese plano
+    // Calculamos la posición inicial del ratón sobre ese plano:
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -186,13 +214,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     );
     raycaster.current.setFromCamera(mouse, camera);
     raycaster.current.ray.intersectPlane(dragPlane.current, startPosition.current);
-
-    console.log('[SectionBox] pointerDown en cara:', face, 'startPosition:', startPosition.current);
+    console.log('[SectionBox] startPosition (en plano):', startPosition.current);
   };
 
-  // —————————————————————————————————————————————————————————
-  // 5) Cada vez que movemos el ratón mientras arrastramos
-  // —————————————————————————————————————————————————————————
+  // ───────────────────────────────────────────────────────────────
+  // 7) Durante el arrastre (pointerMove)
+  // ───────────────────────────────────────────────────────────────
   const handlePointerMove = (event: MouseEvent) => {
     if (!isDragging || !dragFace || !bounds) return;
 
@@ -203,14 +230,13 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     );
     raycaster.current.setFromCamera(mouse, camera);
 
-    // Si intersecta el plano de arrastre, obtenemos delta
     if (raycaster.current.ray.intersectPlane(dragPlane.current, intersection.current)) {
       const delta = intersection.current.clone().sub(startPosition.current);
       const newBounds = {
         min: bounds.min.clone(),
         max: bounds.max.clone(),
       };
-      const minSize = 0.1; // tamaño mínimo para no “colapsar” la caja
+      const minSize = 0.1; // Tamaño mínimo para no colapsar la caja
 
       switch (dragFace) {
         case 'x-min':
@@ -234,25 +260,28 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       }
 
       setBounds(newBounds);
-      console.log('[SectionBox] handlePointerMove, nuevo bounds:', newBounds.min, newBounds.max);
+      console.log('[SectionBox] handlePointerMove → nuevos bounds:', newBounds.min, newBounds.max);
     }
   };
 
-  // —————————————————————————————————————————————————————————
-  // 6) Cuando soltamos el ratón, finalizamos el arrastre
-  // —————————————————————————————————————————————————————————
+  // ───────────────────────────────────────────────────────────────
+  // 8) Cuando el usuario suelta el botón (pointerUp), TERMINAMOS
+  //    el arrastre y realmente APLICAMOS los clipping planes.
+  // ───────────────────────────────────────────────────────────────
   const handlePointerUp = (event: MouseEvent) => {
-    if (isDragging) {
-      setIsDragging(false);
+    if (isDragging && bounds) {
+      // Aplica los clipping planes restantes
+      applyClippingPlanes(bounds);
+      console.log('[SectionBox] pointerUp → aplicando clipping definitivo.');
       onDragStateChange?.(false);
-      console.log('[SectionBox] pointerUp — arrastre finalizado.');
     }
+    setIsDragging(false);
     setDragFace(null);
   };
 
-  // —————————————————————————————————————————————————————————
-  // 7) Registramos / Eliminamos listeners globales mientras arrastramos
-  // —————————————————————————————————————————————————————————
+  // ───────────────────────────────────────────────────────────────
+  // 9) Registrar/limpiar listeners globales durante el arrastre
+  // ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (isDragging) {
       const canvas = gl.domElement;
@@ -268,18 +297,32 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   }, [isDragging, dragFace, bounds]);
 
+  // ───────────────────────────────────────────────────────────────
+  // 10) Si la sección se desactiva (isActive=false) o targets=null,
+  //     quitar clipping inmediatamente y resetear bounds
+  // ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isActive) {
+      removeClippingPlanes();
+      setBounds(null);
+      console.log('[SectionBox] Sección desactivada → reset bounds.');
+    }
+  }, [isActive]);
+
+  // ───────────────────────────────────────────────────────────────
   // Si no hay bounds o sección inactiva, no renderizamos nada
+  // ───────────────────────────────────────────────────────────────
   if (!bounds || !isActive || !targetObject || targetObject.type === 'Scene') {
     return null;
   }
 
-  // Centro y tamaño de la caja, para situar correctamente la geometría
+  // Centro y tamaño en función de los bounds actuales
   const center = bounds.min.clone().lerp(bounds.max, 0.5);
   const size   = bounds.max.clone().sub(bounds.min);
 
   return (
     <group ref={boxRef}>
-      {/* —————— 1) Caja wireframe azul claro —————— */}
+      {/* —————— 1) Caja de armazón (wireframe) —————— */}
       <mesh position={center} userData={{ isSectionBox: true }}>
         <boxGeometry args={[size.x, size.y, size.z]} />
         <meshBasicMaterial
@@ -303,7 +346,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
         />
       </mesh>
 
-      {/* —————— 3) Conos de control (handles) —————— */}
+      {/* —————— 3) Conos de control (“handles”) —————— */}
       {[
         { face: 'x-min', position: [bounds.min.x, center.y, center.z], rotation: [0, 0,  Math.PI / 2] },
         { face: 'x-max', position: [bounds.max.x, center.y, center.z], rotation: [0, 0, -Math.PI / 2] },
@@ -336,7 +379,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
                 if (!isDragging) gl.domElement.style.cursor = 'default';
               }}
             >
-              {/* Detalle: hacemos los conos MÁS PEQUEÑOS (radio=1, altura=2) */}
+              {/* Conos más pequeños (radio=1, altura=2) */}
               <coneGeometry args={[1, 2, 16]} />
               <meshBasicMaterial
                 color={isDraggingThis ? '#FF0000' : (isHoveredThis ? '#FFA500' : '#0066FF')}
