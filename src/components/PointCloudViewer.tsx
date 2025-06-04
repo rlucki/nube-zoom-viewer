@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
+import type { OrbitControls as OrbitControlsImpl } from 'three/examples/jsm/controls/OrbitControls';
 import * as THREE from 'three';
 
 import { FileUploader } from './FileUploader';
@@ -64,7 +65,7 @@ export const PointCloudViewer: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
 
-  const controlsRef = useRef<any>(null);
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const { toast } = useToast();
 
   /* -------------------- States de herramientas ----------------------------- */

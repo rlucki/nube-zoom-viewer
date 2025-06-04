@@ -83,10 +83,14 @@ export const MeasurementTool: React.FC<MeasurementToolProps> = ({
         // Create highlight material
         const highlightMaterial = (mesh.material as THREE.Material).clone();
         if ('color' in highlightMaterial) {
-          (highlightMaterial as any).color.multiplyScalar(1.5);
+          (highlightMaterial as THREE.MeshStandardMaterial).color.multiplyScalar(
+            1.5,
+          );
         }
         if ('emissive' in highlightMaterial) {
-          (highlightMaterial as any).emissive.setHex(0x444444);
+          (highlightMaterial as THREE.MeshStandardMaterial).emissive.setHex(
+            0x444444,
+          );
         }
         
         mesh.material = highlightMaterial;

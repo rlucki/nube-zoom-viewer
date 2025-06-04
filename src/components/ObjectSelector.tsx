@@ -39,9 +39,9 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     scene.traverse((c) => {
       if (
         (c instanceof THREE.Mesh || c instanceof THREE.Points) &&
-        !(c.userData as any).isSectionBox &&    // fuera de la caja
+        !(c.userData as { isSectionBox?: boolean }).isSectionBox && // fuera de la caja
         !c.name.match(/helper|grid|axes/) &&
-        !(c.userData as any).isUI
+        !(c.userData as { isUI?: boolean }).isUI
       ) {
         list.push(c);
       }
@@ -58,7 +58,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         (c instanceof THREE.Mesh || c instanceof THREE.Points) &&
         originals.current.has(c)
       ) {
-        (c as any).material = originals.current.get(c)!;
+        (c as THREE.Mesh | THREE.Points).material = originals.current.get(c)!;
       }
     });
   };
@@ -66,9 +66,14 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   const setTempMaterial = (obj: THREE.Object3D, color: THREE.ColorRepresentation) => {
     obj.traverse((c) => {
       if (c instanceof THREE.Mesh || c instanceof THREE.Points) {
-        if (!originals.current.has(c)) originals.current.set(c, (c as any).material);
+        if (!originals.current.has(c)) {
+          originals.current.set(
+            c,
+            (c as THREE.Mesh | THREE.Points).material as THREE.Material,
+          );
+        }
 
-        (c as any).material = new THREE.MeshBasicMaterial({
+        (c as THREE.Mesh | THREE.Points).material = new THREE.MeshBasicMaterial({
           color,
           transparent : true,
           opacity     : 0.8,

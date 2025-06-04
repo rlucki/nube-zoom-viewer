@@ -67,9 +67,9 @@ export const IFCModel: React.FC<IFCModelProps> = ({
   useEffect(() => {
     meshesRef.current.forEach((mesh) => {
       const applyOpacity = (material: THREE.Material): void => {
-        // @ts-ignore — all MeshBasic / Standard / Lambert etc. share these props
+        // @ts-expect-error mesh materials share 'transparent' but typing lacks it
         material.transparent = transparency < 1;
-        // @ts-ignore
+        // @ts-expect-error mesh materials share 'opacity' but typing lacks it
         material.opacity = transparency;
         material.needsUpdate = true;
       };
