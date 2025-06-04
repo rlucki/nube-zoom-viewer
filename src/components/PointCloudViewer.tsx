@@ -1,3 +1,4 @@
+
 import React, {
   useState,
   useRef,
@@ -14,7 +15,6 @@ import { PointCloud } from './PointCloud';
 import { IFCModel } from './IFCModel';
 import { MeasurementTool } from './MeasurementTool';
 import { SectionBox } from './SectionBox';
-import { ToolsPanel } from './ToolsPanel';
 import { ObjectSelector } from './ObjectSelector';
 import { TransformManipulator } from './TransformManipulator';
 import { TopToolbar } from './TopToolbar';
@@ -348,6 +348,12 @@ export const PointCloudViewer: React.FC = () => {
         setIsLoading={setIsLoading}
         isLoading={isLoading}
         hasFiles={loadedFiles.length > 0}
+        snapMode={snapMode}
+        setSnapMode={setSnapMode}
+        orthoMode={orthoMode}
+        setOrthoMode={setOrthoMode}
+        measurements={measurements}
+        onClearMeasurements={handleClearMeasurements}
       />
 
       {/* ---------- Panel de ajustes ---------------------------------------- */}
@@ -368,24 +374,6 @@ export const PointCloudViewer: React.FC = () => {
         onToggleVisibility={() => setControlsVisible(!controlsVisible)}
         isPointCloud={sampledPoints.length > 0}
         hasIFCModel={ifcModels.length > 0}
-      />
-
-      {/* ---------- Panel de herramientas avanzadas ----------------------- */}
-      <ToolsPanel
-        measurementActive={measurementActive}
-        setMeasurementActive={handleMeasurementToggle}
-        sectionBoxActive={sectionBoxActive}
-        setSectionBoxActive={handleSectionBoxToggle}
-        transformActive={transformActive}
-        setTransformActive={handleTransformToggle}
-        transformMode={transformMode}
-        setTransformMode={setTransformMode}
-        snapMode={snapMode}
-        setSnapMode={setSnapMode}
-        orthoMode={orthoMode}
-        setOrthoMode={setOrthoMode}
-        measurements={measurements}
-        onClearMeasurements={handleClearMeasurements}
       />
 
       {/* ---------- Overlay de carga --------------------------------------- */}
