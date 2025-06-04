@@ -18,6 +18,7 @@ import { MeasurementTool } from './MeasurementTool';
 import { SectionBox } from './SectionBox';
 import { ToolsPanel } from './ToolsPanel';
 import { ObjectSelector } from './ObjectSelector';
+import { TransformManipulator } from './TransformManipulator';
 
 import { useToast } from '@/hooks/use-toast';
 
@@ -72,6 +73,9 @@ export const PointCloudViewer: React.FC = () => {
   const [measurementActive, setMeasurementActive] = useState(false);
   const [sectionBoxActive, setSectionBoxActive]   = useState(false);
   const [selectedObject,   setSelectedObject]     = useState<THREE.Object3D | null>(null);
+  const [transformActive, setTransformActive]     = useState(false);
+  const [transformMode, setTransformMode]         = useState<'translate' | 'rotate'>('translate');
+  const [isTransformDragging, setIsTransformDragging] = useState(false);
   const [snapMode,  setSnapMode]  = useState<'none' | 'vertex' | 'edge' | 'face'>('vertex');
   const [orthoMode, setOrthoMode] = useState<'none' | 'x' | 'y' | 'z'>('none');
   const [measurements, setMeasurements] = useState<
@@ -158,14 +162,18 @@ export const PointCloudViewer: React.FC = () => {
   const handleObjectSelection = useCallback(
     (object: THREE.Object3D | null) => {
       setSelectedObject(object);
-      if (object && sectionBoxActive) {
+      if (object && (sectionBoxActive || transformActive)) {
         toast({
-          title: 'Objeto seleccionado para sección',
-          description: 'Arrastra los controles triangulares para seccionar',
+          title: sectionBoxActive
+            ? 'Objeto seleccionado para sección'
+            : 'Objeto seleccionado para transformar',
+          description: sectionBoxActive
+            ? 'Arrastra los controles triangulares para seccionar'
+            : 'Usa los ejes de colores para mover o rotar',
         });
       }
     },
-    [sectionBoxActive, toast],
+    [sectionBoxActive, transformActive, toast],
   );
 
   /* -------------------- Activación herramientas ---------------------------- */
@@ -187,10 +195,24 @@ export const PointCloudViewer: React.FC = () => {
     [toast],
   );
 
+  const handleTransformToggle = useCallback((active: boolean) => {
+    setTransformActive(active);
+    if (active) {
+      setMeasurementActive(false);
+      setSectionBoxActive(false);
+      setSelectedObject(null);
+    }
+    toast({
+      title: active ? 'Herramienta de transformación activada' : 'Herramienta de transformación desactivada',
+      description: active ? 'Selecciona un objeto para moverlo o rotarlo' : 'Transformaciones deshabilitadas',
+    });
+  }, [toast]);
+
   const handleMeasurementToggle = useCallback((active: boolean) => {
     setMeasurementActive(active);
     if (active) {
       setSectionBoxActive(false);
+      setTransformActive(false);
       setSelectedObject(null);
     }
   }, []);
@@ -254,9 +276,10 @@ export const PointCloudViewer: React.FC = () => {
           />
         ))}
 
-        {/* Selector de objetos (para Sección) */}
+        {/* Selector de objetos (para Sección/Transformación) */}
         <ObjectSelector
-          isActive={sectionBoxActive}
+          isActive={sectionBoxActive || transformActive}
+          isDragging={isDragging || isTransformDragging}
           onObjectHover={() => {}}
           onObjectSelect={handleObjectSelection}
         />
@@ -277,6 +300,14 @@ export const PointCloudViewer: React.FC = () => {
           onDragStateChange={setIsDragging}
         />
 
+        {/* Manipulador de transformación */}
+        <TransformManipulator
+          object={selectedObject}
+          isActive={transformActive}
+          mode={transformMode}
+          onDraggingChange={setIsTransformDragging}
+        />
+
         {/* Controles de cámara */}
         <OrbitControls
           ref={controlsRef}
@@ -286,7 +317,7 @@ export const PointCloudViewer: React.FC = () => {
           zoomSpeed={0.6}
           panSpeed={0.8}
           rotateSpeed={0.4}
-          enabled={!isDragging}
+          enabled={!isDragging && !isTransformDragging}
         />
 
         {/* Extras */}
@@ -357,6 +388,10 @@ export const PointCloudViewer: React.FC = () => {
         setMeasurementActive={handleMeasurementToggle}
         sectionBoxActive={sectionBoxActive}
         setSectionBoxActive={handleSectionBoxToggle}
+        transformActive={transformActive}
+        setTransformActive={handleTransformToggle}
+        transformMode={transformMode}
+        setTransformMode={setTransformMode}
         snapMode={snapMode}
         setSnapMode={setSnapMode}
         orthoMode={orthoMode}
