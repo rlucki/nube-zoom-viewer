@@ -60,6 +60,14 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Features
+
+- Load point clouds and IFC models.
+- Section planes and measurement tools.
+- **New:** interactive transform gizmo to move or rotate selected objects.
+- Shows distance moved while dragging selected objects.
+- Compact horizontal toolbar for quick access to tools.
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/874a0904-98c5-43e1-b7b5-992da92916a2) and click on Share -> Publish.
