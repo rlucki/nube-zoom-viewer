@@ -1,4 +1,3 @@
-
 import React, {
   useState,
   useRef,
@@ -67,7 +66,7 @@ export const PointCloudViewer: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
 
-  const controlsRef = useRef<THREE.Object3D | null>(null);
+  const controlsRef = useRef<any>(null); // Changed from THREE.Object3D to any for OrbitControls
   const { toast } = useToast();
 
   /* -------------------- States de herramientas ----------------------------- */
