@@ -11,6 +11,10 @@ interface ToolsPanelProps {
   setMeasurementActive: (active: boolean) => void;
   sectionBoxActive: boolean;
   setSectionBoxActive: (active: boolean) => void;
+  transformActive: boolean;
+  setTransformActive: (active: boolean) => void;
+  transformMode: 'translate' | 'rotate';
+  setTransformMode: (mode: 'translate' | 'rotate') => void;
   snapMode: 'none' | 'vertex' | 'edge' | 'face';
   setSnapMode: (mode: 'none' | 'vertex' | 'edge' | 'face') => void;
   orthoMode: 'none' | 'x' | 'y' | 'z';
@@ -24,6 +28,10 @@ export const ToolsPanel: React.FC<ToolsPanelProps> = ({
   setMeasurementActive,
   sectionBoxActive,
   setSectionBoxActive,
+  transformActive,
+  setTransformActive,
+  transformMode,
+  setTransformMode,
   snapMode,
   setSnapMode,
   orthoMode,
@@ -95,6 +103,30 @@ export const ToolsPanel: React.FC<ToolsPanelProps> = ({
           </div>
         </div>
 
+        {/* Transform Tools */}
+        <div className="space-y-3">
+          <Label className="text-white font-medium">Transformar</Label>
+          <div className="flex gap-2 items-center">
+            <Button
+              onClick={() => setTransformActive(!transformActive)}
+              variant={transformActive ? 'default' : 'outline'}
+              size="sm"
+              className={transformActive ? 'bg-purple-600 hover:bg-purple-700' : ''}
+            >
+              {transformActive ? 'Desactivar' : 'Activar'}
+            </Button>
+            <Select value={transformMode} onValueChange={setTransformMode}>
+              <SelectTrigger className="bg-gray-800 border-gray-600 text-white w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-gray-800 border-gray-600">
+                <SelectItem value="translate" className="text-white hover:bg-gray-700">Mover</SelectItem>
+                <SelectItem value="rotate" className="text-white hover:bg-gray-700">Rotar</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         {/* Measurements List */}
         {measurements.length > 0 && (
           <div className="space-y-2">
@@ -120,6 +152,7 @@ export const ToolsPanel: React.FC<ToolsPanelProps> = ({
           <div>• Sección: Selecciona modelo y arrastra flechas azules</div>
           <div>• Snap: Ajusta automáticamente a elementos</div>
           <div>• Ortogonal: Bloquea movimiento en un eje</div>
+          <div>• Transformar: Selecciona un objeto y usa los ejes de colores</div>
         </div>
       </div>
     </Card>
