@@ -29,8 +29,32 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
     
     scene.add(gridHelper);
     
+    // Mejorar la iluminación para los modelos IFC
+    // Luz ambiental más intensa
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    scene.add(ambientLight);
+    
+    // Luz direccional principal
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(50, 50, 50);
+    directionalLight.castShadow = true;
+    scene.add(directionalLight);
+    
+    // Luz direccional secundaria para eliminar sombras duras
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight2.position.set(-50, 50, -50);
+    scene.add(directionalLight2);
+    
+    // Luz hemisférica para un relleno suave
+    const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 0.3);
+    scene.add(hemisphereLight);
+    
     return () => {
       scene.remove(gridHelper);
+      scene.remove(ambientLight);
+      scene.remove(directionalLight);
+      scene.remove(directionalLight2);
+      scene.remove(hemisphereLight);
     };
   }, [scene]);
 

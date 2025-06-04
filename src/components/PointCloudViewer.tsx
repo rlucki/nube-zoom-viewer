@@ -66,7 +66,7 @@ export const PointCloudViewer: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
 
-  const controlsRef = useRef<any>(null); // Changed from THREE.Object3D to any for OrbitControls
+  const controlsRef = useRef<any>(null);
   const { toast } = useToast();
 
   /* -------------------- States de herramientas ----------------------------- */
@@ -81,7 +81,7 @@ export const PointCloudViewer: React.FC = () => {
   const [measurements, setMeasurements] = useState<
     Array<{ distance: number; points: [THREE.Vector3, THREE.Vector3] }>
   >([]);
-  const [isDragging, setIsDragging] = useState(false); // arrastre de SectionBox
+  const [isDragging, setIsDragging] = useState(false);
 
   /* -------------------- Mensaje de bienvenida ------------------------------ */
   useEffect(() => {
@@ -97,10 +97,29 @@ export const PointCloudViewer: React.FC = () => {
     if (pcs.length === 0) return [];
 
     const all = pcs.flatMap((f) => f.data as Point[]);
-    const sampleSize = Math.ceil(all.length * density);
-    const step = Math.max(1, Math.floor(all.length / sampleSize));
+    if (all.length === 0) return [];
 
-    return all.filter((_, i) => i % step === 0);
+    // Mejorar el algoritmo de sampling para distribuir mejor los puntos
+    if (density >= 1) {
+      return all; // Mostrar todos los puntos si la densidad es 100%
+    }
+
+    const sampleSize = Math.ceil(all.length * density);
+    if (sampleSize >= all.length) {
+      return all;
+    }
+
+    // Usar sampling regular en lugar de por pasos para mejor distribución
+    const step = all.length / sampleSize;
+    const sampled = [];
+    for (let i = 0; i < sampleSize; i++) {
+      const index = Math.floor(i * step);
+      if (index < all.length) {
+        sampled.push(all[index]);
+      }
+    }
+
+    return sampled;
   }, [loadedFiles, density]);
 
   const ifcModels = useMemo(
@@ -308,7 +327,7 @@ export const PointCloudViewer: React.FC = () => {
             onDraggingChange={setIsTransformDragging}
           />
 
-          {/* Controles de cámara */}
+          {/* Controles de cámara - Solo se deshabilitan durante el drag de transform manipulator */}
           <OrbitControls
             ref={controlsRef}
             enablePan
@@ -317,7 +336,7 @@ export const PointCloudViewer: React.FC = () => {
             zoomSpeed={0.6}
             panSpeed={0.8}
             rotateSpeed={0.4}
-            enabled={!isDragging && !isTransformDragging}
+            enabled={!isTransformDragging}
           />
 
           {/* Stats */}
