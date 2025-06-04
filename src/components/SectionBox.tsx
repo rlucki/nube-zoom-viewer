@@ -25,7 +25,9 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   // Referencias de THREE.js
   const boxRef = useRef<THREE.Group>(null);
   const raycaster = useRef(new THREE.Raycaster());
-  const dragPlane = useRef(new THREE.Plane());
+  const dragPlane = useRef<THREE.Plane & { axis?: THREE.Vector3 }>(
+    new THREE.Plane(),
+  );
   const intersection = useRef(new THREE.Vector3());
   const startPosition = useRef(new THREE.Vector3());
 
@@ -35,9 +37,13 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   useEffect(() => {
     if (boxRef.current) {
       boxRef.current.traverse((child) => {
-        (child as any).userData.isSectionBox = true;
+        (child as THREE.Object3D & {
+          userData: { isSectionBox?: boolean };
+        }).userData.isSectionBox = true;
       });
-      (boxRef.current as any).userData.isSectionBox = true;
+      (boxRef.current as THREE.Object3D & {
+        userData: { isSectionBox?: boolean };
+      }).userData.isSectionBox = true;
       console.log('[SectionBox] Todos los nodos marcados isSectionBox=true');
     }
   }, []);
@@ -94,7 +100,7 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
       child.material
     ) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
-      mats.forEach((mat: any) => {
+      mats.forEach((mat: THREE.Material) => {
         mat.clippingPlanes    = planes;
         mat.clipIntersection  = true;   // 👈  ¡esta línea hace la magia!
         mat.needsUpdate       = true;
@@ -135,7 +141,10 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
   }, [bounds, isActive]);
 
   // 6) Iniciar arrastre (pointerDown sobre un cono)
-  const handlePointerDown = (event: any, face: string) => {
+  const handlePointerDown = (
+    event: React.PointerEvent<HTMLElement>,
+    face: string,
+  ) => {
     if (!bounds) return;
     event.stopPropagation();
     event.nativeEvent?.stopImmediatePropagation?.();
@@ -189,7 +198,7 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
     raycaster.current.ray.intersectPlane(dragPlane.current, startPosition.current);
 
     // Guardamos también el eje para usarlo en pointerMove
-    (dragPlane.current as any).axis = axis;
+    dragPlane.current.axis = axis;
   };
 
   // 7) Durante el arrastre (pointerMove)
@@ -207,7 +216,7 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
       const delta = intersection.current
         .clone()
         .sub(startPosition.current);            // movimiento completo
-      const axis = (dragPlane.current as any).axis as THREE.Vector3;
+      const axis = dragPlane.current.axis as THREE.Vector3;
       const move = delta.dot(axis);            // proyección sobre el eje
 
       const newBounds = {
