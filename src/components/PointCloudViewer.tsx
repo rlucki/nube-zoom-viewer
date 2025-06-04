@@ -10,7 +10,6 @@ import { OrbitControls, Stats } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three/examples/jsm/controls/OrbitControls';
 import * as THREE from 'three';
 
-import { FileUploader } from './FileUploader';
 import { ViewerControls } from './ViewerControls';
 import { PointCloud } from './PointCloud';
 import { IFCModel } from './IFCModel';
@@ -19,6 +18,7 @@ import { SectionBox } from './SectionBox';
 import { ToolsPanel } from './ToolsPanel';
 import { ObjectSelector } from './ObjectSelector';
 import { TransformManipulator } from './TransformManipulator';
+import { TopToolbar } from './TopToolbar';
 
 import { useToast } from '@/hooks/use-toast';
 
@@ -128,6 +128,11 @@ export const PointCloudViewer: React.FC = () => {
 
   const handleClear = useCallback(() => {
     setLoadedFiles([]);
+    setMeasurements([]);
+    setSelectedObject(null);
+    setMeasurementActive(false);
+    setSectionBoxActive(false);
+    setTransformActive(false);
     toast({
       title: 'Datos limpiados',
       description: 'Todos los archivos han sido eliminados',
@@ -320,9 +325,9 @@ export const PointCloudViewer: React.FC = () => {
           enabled={!isDragging && !isTransformDragging}
         />
 
-        {/* Extras */}
+        {/* Extras con grilla más transparente */}
         <axesHelper args={[10]} />
-        <gridHelper args={[100, 100]} />
+        <gridHelper args={[100, 100, '#ffffff', '#ffffff']} />
         <Stats />
       </>
     );
@@ -333,34 +338,23 @@ export const PointCloudViewer: React.FC = () => {
   /* -------------------------------------------------------------------------- */
   return (
     <div className="w-full h-screen bg-gray-900 relative">
-      {/* ---------- Barra superior: botones y uploader ----------------------- */}
-      <div className="absolute top-4 left-4 z-20 flex items-center gap-4">
-        <h1 className="text-2xl font-bold text-white">
-          Visor de Nubes de Puntos
-        </h1>
-
-        <FileUploader
-          onFileLoad={handleFileLoad}
-          setIsLoading={setIsLoading}
-          isLoading={isLoading}
-        />
-
-        {loadedFiles.length > 0 && (
-          <button
-            onClick={handleClear}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-          >
-            Limpiar
-          </button>
-        )}
-
-        <button
-          onClick={resetCamera}
-          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
-        >
-          Reset Cámara
-        </button>
-      </div>
+      {/* ---------- Barra superior de herramientas --------------------------- */}
+      <TopToolbar
+        onClear={handleClear}
+        onResetCamera={resetCamera}
+        measurementActive={measurementActive}
+        onMeasurementToggle={handleMeasurementToggle}
+        sectionBoxActive={sectionBoxActive}
+        onSectionBoxToggle={handleSectionBoxToggle}
+        transformActive={transformActive}
+        onTransformToggle={handleTransformToggle}
+        transformMode={transformMode}
+        onTransformModeChange={setTransformMode}
+        onFileLoad={handleFileLoad}
+        setIsLoading={setIsLoading}
+        isLoading={isLoading}
+        hasFiles={loadedFiles.length > 0}
+      />
 
       {/* ---------- Panel de ajustes ---------------------------------------- */}
       <ViewerControls
@@ -382,7 +376,7 @@ export const PointCloudViewer: React.FC = () => {
         hasIFCModel={ifcModels.length > 0}
       />
 
-      {/* ---------- Herramientas ------------------------------------------- */}
+      {/* ---------- Panel de herramientas avanzadas ----------------------- */}
       <ToolsPanel
         measurementActive={measurementActive}
         setMeasurementActive={handleMeasurementToggle}
@@ -416,12 +410,20 @@ export const PointCloudViewer: React.FC = () => {
         className="absolute inset-0"
         gl={{ antialias: true, alpha: true }}
         onCreated={({ gl }) => {
-          /* 🔑 Habilitamos el clipping local una sola vez */
           gl.localClippingEnabled = true;
+          
+          // Configurar la grilla con opacidad reducida
+          gl.setClearColor('#1a1a1a', 1);
         }}
       >
         <Scene />
       </Canvas>
+
+      <style jsx>{`
+        .react-three-fiber canvas {
+          background: #1a1a1a !important;
+        }
+      `}</style>
     </div>
   );
 };
