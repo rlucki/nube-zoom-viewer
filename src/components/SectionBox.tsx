@@ -134,10 +134,12 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
     console.log('[SectionBox] Clipping removido (sección inactiva o reseteo).');
   };
 
-  // 5) Cada vez que cambian bounds, si NO estamos arrastrando ni se acaba de soltar, NO hacemos nada extra.
-  //    Cuando se desactiva la sección, limpiamos.
+  // 5) Actualizar clipping cuando cambian los límites o el estado activo.
+  //    Si la herramienta está activa aplicamos los planos; en caso contrario los quitamos.
   useEffect(() => {
-    if (!isActive || !bounds) {
+    if (isActive && bounds) {
+      applyClippingPlanes(bounds);
+    } else {
       removeClippingPlanes();
     }
   }, [bounds, isActive]);
