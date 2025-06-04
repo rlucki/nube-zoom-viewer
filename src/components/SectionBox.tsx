@@ -30,6 +30,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   );
   const intersection = useRef(new THREE.Vector3());
   const startPosition = useRef(new THREE.Vector3());
+  const captureTarget = useRef<EventTarget | null>(null);
 
   const { camera, gl } = useThree();
 
@@ -109,6 +110,7 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
   });
 
   console.log('[SectionBox] Clipping aplicado:', newBounds.min, newBounds.max);
+  onSectionChange?.(newBounds);
 };
 
 
@@ -148,6 +150,10 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
     if (!bounds) return;
     event.stopPropagation();
     event.nativeEvent?.stopImmediatePropagation?.();
+
+    // Capture pointer to avoid losing events
+    captureTarget.current = event.currentTarget;
+    (captureTarget.current as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
 
     setIsDragging(true);
     setDragFace(face);
@@ -249,6 +255,10 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
       console.log('[SectionBox] pointerUp → clipping definitivo');
       onDragStateChange?.(false);
     }
+    if (captureTarget.current) {
+      (captureTarget.current as HTMLElement | null)?.releasePointerCapture?.(_event.pointerId);
+      captureTarget.current = null;
+    }
     setIsDragging(false);
     setDragFace(null);
   };
@@ -266,7 +276,7 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
         canvas.style.cursor = 'default';
       };
     }
-  }, [isDragging, dragFace, bounds]);
+  }, [isDragging, dragFace]);
 
   // 10) Si se desactiva el tool (isActive=false), borramos todo
   useEffect(() => {
