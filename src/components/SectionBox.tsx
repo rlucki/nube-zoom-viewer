@@ -1,7 +1,8 @@
+
 // src/components/SectionBox.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
-import { useThree } from '@react-three/fiber';
+import { useThree, ThreeEvent } from '@react-three/fiber';
 
 interface SectionBoxProps {
   targetObject: THREE.Object3D | null;
@@ -146,7 +147,7 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
 
   // 6) Iniciar arrastre (pointerDown sobre un cono)
   const handlePointerDown = (
-    event: React.PointerEvent<HTMLElement>,
+    event: ThreeEvent<PointerEvent>,
     face: string,
   ) => {
     if (!bounds) return;
@@ -154,8 +155,10 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
     event.nativeEvent?.stopImmediatePropagation?.();
 
     // Capture pointer to avoid losing events
-    captureTarget.current = event.currentTarget;
-    (captureTarget.current as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
+    captureTarget.current = event.nativeEvent?.target as EventTarget;
+    if (captureTarget.current && 'setPointerCapture' in captureTarget.current) {
+      (captureTarget.current as any).setPointerCapture(event.nativeEvent.pointerId);
+    }
 
     setIsDragging(true);
     setDragFace(face);
@@ -193,8 +196,8 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
     
     // Use the pointer position from the Three.js event
     const rect = gl.domElement.getBoundingClientRect();
-    const clientX = event.nativeEvent?.clientX || event.clientX || 0;
-    const clientY = event.nativeEvent?.clientY || event.clientY || 0;
+    const clientX = event.nativeEvent?.clientX || 0;
+    const clientY = event.nativeEvent?.clientY || 0;
     
     raycaster.current.setFromCamera(
       new THREE.Vector2(
@@ -251,14 +254,14 @@ const applyClippingPlanes = (newBounds: { min: THREE.Vector3; max: THREE.Vector3
   };
 
   // 8) Finalizar arrastre (pointerUp): aquí es donde SÍ aplicamos verdaderamente el clipping
-  const handlePointerUp = (_event: MouseEvent) => {
+  const handlePointerUp = (event: MouseEvent) => {
     if (isDragging && bounds) {
       applyClippingPlanes(bounds);
       console.log('[SectionBox] pointerUp → clipping definitivo');
       onDragStateChange?.(false);
     }
-    if (captureTarget.current) {
-      (captureTarget.current as HTMLElement | null)?.releasePointerCapture?.(_event.pointerId);
+    if (captureTarget.current && 'releasePointerCapture' in captureTarget.current) {
+      (captureTarget.current as any).releasePointerCapture((event as any).pointerId);
       captureTarget.current = null;
     }
     setIsDragging(false);

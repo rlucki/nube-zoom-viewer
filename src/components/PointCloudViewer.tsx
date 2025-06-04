@@ -1,3 +1,4 @@
+
 import React, {
   useState,
   useRef,
@@ -7,7 +8,6 @@ import React, {
 } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
-import type { OrbitControls as OrbitControlsImpl } from 'three/examples/jsm/controls/OrbitControls';
 import * as THREE from 'three';
 
 import { ViewerControls } from './ViewerControls';
@@ -19,6 +19,7 @@ import { ToolsPanel } from './ToolsPanel';
 import { ObjectSelector } from './ObjectSelector';
 import { TransformManipulator } from './TransformManipulator';
 import { TopToolbar } from './TopToolbar';
+import { Scene } from './Scene';
 
 import { useToast } from '@/hooks/use-toast';
 
@@ -66,7 +67,7 @@ export const PointCloudViewer: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
 
-  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const controlsRef = useRef<THREE.Object3D | null>(null);
   const { toast } = useToast();
 
   /* -------------------- States de herramientas ----------------------------- */
@@ -140,7 +141,9 @@ export const PointCloudViewer: React.FC = () => {
   }, [toast]);
 
   const resetCamera = useCallback(() => {
-    controlsRef.current?.reset();
+    if (controlsRef.current && 'reset' in controlsRef.current) {
+      (controlsRef.current as any).reset();
+    }
   }, []);
 
   /* -------------------- Medición ------------------------------------------- */
@@ -225,7 +228,7 @@ export const PointCloudViewer: React.FC = () => {
   /* -------------------------------------------------------------------------- */
   /*  Escena interna (luces, modelos, etc.)                                     */
   /* -------------------------------------------------------------------------- */
-  const Scene = () => {
+  const InternalScene = () => {
     const { scene } = useThree();
 
     /* -- Limpiamos clipping cuando se desactiva la herramienta -------------- */
@@ -256,79 +259,71 @@ export const PointCloudViewer: React.FC = () => {
 
     return (
       <>
-        <color attach="background" args={['#1a1a1a']} />
+        <Scene>
+          {/* Point-cloud */}
+          {sampledPoints.length > 0 && (
+            <PointCloud
+              points={sampledPoints}
+              pointSize={pointSize}
+              colorMode={colorMode}
+            />
+          )}
 
-        {/* Luces básicas */}
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[10, 10, 5]} intensity={0.8} />
-        <directionalLight position={[-10, -10, -5]} intensity={0.3} />
+          {/* Modelos IFC */}
+          {ifcModels.map((file) => (
+            <IFCModel
+              key={file.id}
+              geometry={file.data as IFCGeometry}
+              transparency={transparency}
+            />
+          ))}
 
-        {/* Point-cloud */}
-        {sampledPoints.length > 0 && (
-          <PointCloud
-            points={sampledPoints}
-            pointSize={pointSize}
-            colorMode={colorMode}
+          {/* Selector de objetos (para Sección/Transformación) */}
+          <ObjectSelector
+            isActive={sectionBoxActive || transformActive}
+            onObjectHover={() => {}}
+            onObjectSelect={handleObjectSelection}
           />
-        )}
 
-        {/* Modelos IFC */}
-        {ifcModels.map((file) => (
-          <IFCModel
-            key={file.id}
-            geometry={file.data as IFCGeometry}
-            transparency={transparency}
+          {/* Herramienta de medición */}
+          <MeasurementTool
+            isActive={measurementActive}
+            snapMode={snapMode}
+            orthoMode={orthoMode}
+            onMeasure={handleMeasurement}
+            onSnapModeChange={setSnapMode}
           />
-        ))}
 
-        {/* Selector de objetos (para Sección/Transformación) */}
-        <ObjectSelector
-          isActive={sectionBoxActive || transformActive}
-          isDragging={isDragging || isTransformDragging}
-          onObjectHover={() => {}}
-          onObjectSelect={handleObjectSelection}
-        />
+          {/* Caja de sección */}
+          <SectionBox
+            targetObject={selectedObject}
+            isActive={sectionBoxActive}
+            onDragStateChange={setIsDragging}
+          />
 
-        {/* Herramienta de medición */}
-        <MeasurementTool
-          isActive={measurementActive}
-          snapMode={snapMode}
-          orthoMode={orthoMode}
-          onMeasure={handleMeasurement}
-          onSnapModeChange={setSnapMode}
-        />
+          {/* Manipulador de transformación */}
+          <TransformManipulator
+            object={selectedObject}
+            isActive={transformActive}
+            mode={transformMode}
+            onDraggingChange={setIsTransformDragging}
+          />
 
-        {/* Caja de sección */}
-        <SectionBox
-          targetObject={selectedObject}
-          isActive={sectionBoxActive}
-          onDragStateChange={setIsDragging}
-        />
+          {/* Controles de cámara */}
+          <OrbitControls
+            ref={controlsRef}
+            enablePan
+            enableZoom
+            enableRotate
+            zoomSpeed={0.6}
+            panSpeed={0.8}
+            rotateSpeed={0.4}
+            enabled={!isDragging && !isTransformDragging}
+          />
 
-        {/* Manipulador de transformación */}
-        <TransformManipulator
-          object={selectedObject}
-          isActive={transformActive}
-          mode={transformMode}
-          onDraggingChange={setIsTransformDragging}
-        />
-
-        {/* Controles de cámara */}
-        <OrbitControls
-          ref={controlsRef}
-          enablePan
-          enableZoom
-          enableRotate
-          zoomSpeed={0.6}
-          panSpeed={0.8}
-          rotateSpeed={0.4}
-          enabled={!isDragging && !isTransformDragging}
-        />
-
-        {/* Extras con grilla más transparente */}
-        <axesHelper args={[10]} />
-        <gridHelper args={[100, 100, '#ffffff', '#ffffff']} />
-        <Stats />
+          {/* Stats */}
+          <Stats />
+        </Scene>
       </>
     );
   };
@@ -411,19 +406,11 @@ export const PointCloudViewer: React.FC = () => {
         gl={{ antialias: true, alpha: true }}
         onCreated={({ gl }) => {
           gl.localClippingEnabled = true;
-          
-          // Configurar la grilla con opacidad reducida
           gl.setClearColor('#1a1a1a', 1);
         }}
       >
-        <Scene />
+        <InternalScene />
       </Canvas>
-
-      <style jsx>{`
-        .react-three-fiber canvas {
-          background: #1a1a1a !important;
-        }
-      `}</style>
     </div>
   );
 };

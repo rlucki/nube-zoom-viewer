@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { IFCGeometry } from './PointCloudViewer';
@@ -67,10 +68,8 @@ export const IFCModel: React.FC<IFCModelProps> = ({
   useEffect(() => {
     meshesRef.current.forEach((mesh) => {
       const applyOpacity = (material: THREE.Material): void => {
-        // @ts-expect-error mesh materials share 'transparent' but typing lacks it
-        material.transparent = transparency < 1;
-        // @ts-expect-error mesh materials share 'opacity' but typing lacks it
-        material.opacity = transparency;
+        (material as any).transparent = transparency < 1;
+        (material as any).opacity = transparency;
         material.needsUpdate = true;
       };
 
