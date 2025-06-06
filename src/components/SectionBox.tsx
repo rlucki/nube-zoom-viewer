@@ -1,6 +1,3 @@
-/** @jsx React.createElement */
-/** @jsxFrag React.Fragment */
-/** @jsxRuntime classic */
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
