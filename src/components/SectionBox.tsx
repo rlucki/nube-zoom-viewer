@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
@@ -7,25 +8,21 @@ interface SectionBoxProps {
   onDragStateChange?: (isDragging: boolean) => void;
 }
 
-/**
- * Herramienta de seccionado con movimiento incremental y modo "fino" (⇧‑Shift).
- */
-export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateChange }) => {
+export const SectionBox: React.FC<SectionBoxProps> = ({
+  isActive,
+  onDragStateChange,
+}) => {
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragHandle, setDragHandle] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState<THREE.Vector3 | null>(null);
-  const [dragAxis, setDragAxis] = useState<'x' | 'y' | 'z' | null>(null);
-  const [speed, setSpeed] = useState(1); // 1 normal, 0.1 con ⇧
   const [userModified, setUserModified] = useState(false);
 
   const boxRef = useRef<THREE.Group>(null);
   const { camera, gl, scene } = useThree();
   const raycaster = useRef(new THREE.Raycaster());
 
-  /* ----------------------------------------------------------- */
-  /*  Calcular bounds iniciales                                  */
-  /* ----------------------------------------------------------- */
+  // Calcular bounds iniciales solo cuando se activa la herramienta y no ha sido modificada por el usuario
   useEffect(() => {
     if (isActive && !userModified && !bounds) {
       const globalBox = new THREE.Box3();
@@ -46,7 +43,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
               hasObjects = true;
             }
           }
-
+          
           if (child instanceof THREE.Points && child.geometry.boundingBox) {
             const box = child.geometry.boundingBox.clone();
             box.applyMatrix4(child.matrixWorld);
@@ -62,9 +59,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
         const size = globalBox.getSize(new THREE.Vector3());
         const expansion = Math.max(size.x, size.y, size.z) * 0.05;
         globalBox.expandByScalar(expansion);
-        setBounds({ min: globalBox.min.clone(), max: globalBox.max.clone() });
+        
+        setBounds({
+          min: globalBox.min.clone(),
+          max: globalBox.max.clone(),
+        });
       } else {
-        // fallback genérico
         setBounds({
           min: new THREE.Vector3(-10, -10, -10),
           max: new THREE.Vector3(10, 10, 10),
@@ -73,9 +73,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [isActive, scene, userModified, bounds]);
 
-  /* ----------------------------------------------------------- */
-  /*  Clipping                                                   */
-  /* ----------------------------------------------------------- */
+  // Aplicar clipping planes
   const applyClipping = (newBounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
     const planes = [
       new THREE.Plane(new THREE.Vector3(1, 0, 0), -newBounds.min.x),
@@ -96,13 +94,13 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
       ) {
         if (child instanceof THREE.Mesh && child.material) {
           const materials = Array.isArray(child.material) ? child.material : [child.material];
-          materials.forEach((m) => {
-            m.clippingPlanes = planes;
-            m.clipShadows = true;
-            m.needsUpdate = true;
+          materials.forEach((material) => {
+            material.clippingPlanes = planes;
+            material.clipShadows = true;
+            material.needsUpdate = true;
           });
         }
-
+        
         if (child instanceof THREE.Points && child.material) {
           child.material.clippingPlanes = planes;
           child.material.clipShadows = true;
@@ -112,16 +110,21 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     });
   };
 
+  // Remover clipping planes
   const removeClipping = () => {
     scene.traverse((child) => {
-      if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && !child.userData.isSectionBox) {
+      if (
+        (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
+        !child.userData.isSectionBox
+      ) {
         if (child instanceof THREE.Mesh && child.material) {
           const materials = Array.isArray(child.material) ? child.material : [child.material];
-          materials.forEach((m) => {
-            m.clippingPlanes = [];
-            m.needsUpdate = true;
+          materials.forEach((material) => {
+            material.clippingPlanes = [];
+            material.needsUpdate = true;
           });
         }
+        
         if (child instanceof THREE.Points && child.material) {
           child.material.clippingPlanes = [];
           child.material.needsUpdate = true;
@@ -130,6 +133,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     });
   };
 
+  // Aplicar clipping cuando cambien los bounds
   useEffect(() => {
     if (isActive && bounds) {
       applyClipping(bounds);
@@ -138,9 +142,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [bounds, isActive, scene]);
 
-  /* ----------------------------------------------------------- */
-  /*  Limpieza al desactivar                                     */
-  /* ----------------------------------------------------------- */
+  // Limpiar cuando se desactiva
   useEffect(() => {
     if (!isActive) {
       removeClipping();
@@ -149,144 +151,184 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [isActive]);
 
-  /* ----------------------------------------------------------- */
-  /*  Marca visual del section‑box                               */
-  /* ----------------------------------------------------------- */
+  // Marcar elementos del section box
   useEffect(() => {
     if (boxRef.current) {
-      boxRef.current.traverse((child) => (child.userData.isSectionBox = true));
+      boxRef.current.traverse((child) => {
+        child.userData.isSectionBox = true;
+      });
     }
   }, [bounds]);
 
-  /* ----------------------------------------------------------- */
-  /*  Pointer‑handlers                                           */
-  /* ----------------------------------------------------------- */
+  // Handlers de arrastre
   const handlePointerDown = (event: ThreeEvent<PointerEvent>, handle: string) => {
     if (!bounds) return;
-
+    
     event.stopPropagation();
     setIsDragging(true);
     setDragHandle(handle);
     onDragStateChange?.(true);
-
+    
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((event.nativeEvent.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.nativeEvent.clientY - rect.top) / rect.height) * 2 + 1,
+      -((event.nativeEvent.clientY - rect.top) / rect.height) * 2 + 1
     );
+
     raycaster.current.setFromCamera(mouse, camera);
-
-    // plano de arrastre según el eje del asa
+    
     const center = bounds.min.clone().lerp(bounds.max, 0.5);
-    const axis = handle.charAt(0) as 'x' | 'y' | 'z';
     let planeNormal = new THREE.Vector3();
-    if (axis === 'x') planeNormal.set(1, 0, 0);
-    if (axis === 'y') planeNormal.set(0, 1, 0);
-    if (axis === 'z') planeNormal.set(0, 0, 1);
-    const dragPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, center);
-
-    const hit = new THREE.Vector3();
-    if (raycaster.current.ray.intersectPlane(dragPlane, hit)) {
-      setDragStart(hit.clone());
+    
+    switch (handle) {
+      case 'x-min':
+      case 'x-max':
+        planeNormal.set(1, 0, 0);
+        break;
+      case 'y-min':
+      case 'y-max':
+        planeNormal.set(0, 1, 0);
+        break;
+      case 'z-min':
+      case 'z-max':
+        planeNormal.set(0, 0, 1);
+        break;
     }
 
-    setDragAxis(axis);
-    setSpeed(event.nativeEvent.shiftKey ? 0.1 : 1);
+    const dragPlane = new THREE.Plane(planeNormal, 0);
+    dragPlane.setFromNormalAndCoplanarPoint(planeNormal, center);
+    
+    const intersection = new THREE.Vector3();
+    if (raycaster.current.ray.intersectPlane(dragPlane, intersection)) {
+      setDragStart(intersection);
+    }
+
     gl.domElement.style.cursor = 'grabbing';
   };
 
   const handlePointerMove = (event: MouseEvent) => {
-    if (!isDragging || !dragHandle || !bounds || !dragStart || !dragAxis) return;
+    if (!isDragging || !dragHandle || !bounds || !dragStart) return;
 
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
     );
+
     raycaster.current.setFromCamera(mouse, camera);
 
     const center = bounds.min.clone().lerp(bounds.max, 0.5);
     let planeNormal = new THREE.Vector3();
-    if (dragAxis === 'x') planeNormal.set(1, 0, 0);
-    if (dragAxis === 'y') planeNormal.set(0, 1, 0);
-    if (dragAxis === 'z') planeNormal.set(0, 0, 1);
-    const dragPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, center);
-
-    const hit = new THREE.Vector3();
-    if (!raycaster.current.ray.intersectPlane(dragPlane, hit)) return;
-
-    // desplazamiento incremental en el eje
-    let delta = (hit[dragAxis] - dragStart[dragAxis]) * speed;
-    if (Math.abs(delta) < 1e-6) return; // evita ruido mínimo
-
-    /* --- snapping opcional a pasos de 0.05u --- */
-    const step = 0.05;
-    delta = Math.round(delta / step) * step;
-
-    const newBounds = {
-      min: bounds.min.clone(),
-      max: bounds.max.clone(),
-    };
-
-    const minSize = 0.1;
-    if (dragHandle.endsWith('min')) {
-      newBounds.min[dragAxis] = Math.min(newBounds.min[dragAxis] + delta, newBounds.max[dragAxis] - minSize);
-    } else {
-      newBounds.max[dragAxis] = Math.max(newBounds.max[dragAxis] + delta, newBounds.min[dragAxis] + minSize);
+    
+    switch (dragHandle) {
+      case 'x-min':
+      case 'x-max':
+        planeNormal.set(1, 0, 0);
+        break;
+      case 'y-min':
+      case 'y-max':
+        planeNormal.set(0, 1, 0);
+        break;
+      case 'z-min':
+      case 'z-max':
+        planeNormal.set(0, 0, 1);
+        break;
     }
 
-    setBounds(newBounds);
-    setUserModified(true);
-    setDragStart(hit.clone()); // mueve el punto de referencia
+    const dragPlane = new THREE.Plane(planeNormal, 0);
+    dragPlane.setFromNormalAndCoplanarPoint(planeNormal, center);
+    
+    const intersection = new THREE.Vector3();
+    if (raycaster.current.ray.intersectPlane(dragPlane, intersection)) {
+      const newBounds = {
+        min: bounds.min.clone(),
+        max: bounds.max.clone(),
+      };
+
+      const minSize = 0.1;
+      
+      switch (dragHandle) {
+        case 'x-min':
+          newBounds.min.x = Math.min(intersection.x, newBounds.max.x - minSize);
+          break;
+        case 'x-max':
+          newBounds.max.x = Math.max(intersection.x, newBounds.min.x + minSize);
+          break;
+        case 'y-min':
+          newBounds.min.y = Math.min(intersection.y, newBounds.max.y - minSize);
+          break;
+        case 'y-max':
+          newBounds.max.y = Math.max(intersection.y, newBounds.min.y + minSize);
+          break;
+        case 'z-min':
+          newBounds.min.z = Math.min(intersection.z, newBounds.max.z - minSize);
+          break;
+        case 'z-max':
+          newBounds.max.z = Math.max(intersection.z, newBounds.min.z + minSize);
+          break;
+      }
+
+      setBounds(newBounds);
+      setUserModified(true); // Marcar que el usuario ha modificado el cubo
+    }
   };
 
   const handlePointerUp = () => {
     setIsDragging(false);
     setDragHandle(null);
     setDragStart(null);
-    setDragAxis(null);
     onDragStateChange?.(false);
     gl.domElement.style.cursor = 'default';
   };
 
-  /* ----------------------------------------------------------- */
-  /*  Listeners globales                                         */
-  /* ----------------------------------------------------------- */
+  // Event listeners globales
   useEffect(() => {
     if (isDragging) {
       const canvas = gl.domElement;
       canvas.addEventListener('pointermove', handlePointerMove);
       canvas.addEventListener('pointerup', handlePointerUp);
+      
       return () => {
         canvas.removeEventListener('pointermove', handlePointerMove);
         canvas.removeEventListener('pointerup', handlePointerUp);
       };
     }
-  }, [isDragging, dragHandle, bounds, dragStart, dragAxis, speed]);
+  }, [isDragging, dragHandle, bounds, dragStart]);
 
-  /* ----------------------------------------------------------- */
-  /*  Render                                                     */
-  /* ----------------------------------------------------------- */
-  if (!bounds || !isActive) return null;
+  if (!bounds || !isActive) {
+    return null;
+  }
 
   const center = bounds.min.clone().lerp(bounds.max, 0.5);
   const size = bounds.max.clone().sub(bounds.min);
 
   return (
     <group ref={boxRef}>
-      {/* Wireframe */}
+      {/* Caja wireframe */}
       <mesh position={center} userData={{ isSectionBox: true }}>
         <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial wireframe color="#00FFFF" transparent opacity={0.8} depthTest={false} />
+        <meshBasicMaterial
+          wireframe
+          color="#00FFFF"
+          transparent
+          opacity={0.8}
+          depthTest={false}
+        />
       </mesh>
 
       {/* Caja semitransparente */}
       <mesh position={center} userData={{ isSectionBox: true }}>
         <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial color="#00FFFF" transparent opacity={0.1} side={THREE.DoubleSide} depthTest={false} />
+        <meshBasicMaterial
+          color="#00FFFF"
+          transparent
+          opacity={0.1}
+          side={THREE.DoubleSide}
+          depthTest={false}
+        />
       </mesh>
 
-      {/* Handles */}
+      {/* Handles de control */}
       {[
         { handle: 'x-min', position: [bounds.min.x, center.y, center.z], color: '#ff0000' },
         { handle: 'x-max', position: [bounds.max.x, center.y, center.z], color: '#ff0000' },
@@ -308,7 +350,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
           }}
         >
           <sphereGeometry args={[0.3, 16, 16]} />
-          <meshBasicMaterial color={item.color} transparent opacity={0.9} depthTest={false} />
+          <meshBasicMaterial
+            color={item.color}
+            transparent
+            opacity={0.9}
+            depthTest={false}
+          />
         </mesh>
       ))}
     </group>
