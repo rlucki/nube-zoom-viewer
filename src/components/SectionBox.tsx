@@ -1,3 +1,4 @@
+/** @jsxImportSource @react-three/fiber */
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
