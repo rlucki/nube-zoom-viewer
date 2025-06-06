@@ -19,9 +19,11 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragHandle, setDragHandle] = useState<string | null>(null);
+  const [dragStart, setDragStart] = useState<THREE.Vector3 | null>(null);
 
   const boxRef = useRef<THREE.Group>(null);
   const { camera, gl, scene } = useThree();
+  const raycaster = useRef(new THREE.Raycaster());
 
   // Crear bounds iniciales cuando se activa y hay un objeto target
   useEffect(() => {
@@ -53,27 +55,29 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   const applyClipping = (newBounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
     if (!targetObject) return;
 
+    // Crear los planos de clipping
     const planes = [
-      new THREE.Plane(new THREE.Vector3(1, 0, 0), -newBounds.min.x),   // x >= min.x
-      new THREE.Plane(new THREE.Vector3(-1, 0, 0), newBounds.max.x),   // x <= max.x
-      new THREE.Plane(new THREE.Vector3(0, 1, 0), -newBounds.min.y),   // y >= min.y
-      new THREE.Plane(new THREE.Vector3(0, -1, 0), newBounds.max.y),   // y <= max.y
-      new THREE.Plane(new THREE.Vector3(0, 0, 1), -newBounds.min.z),   // z >= min.z
-      new THREE.Plane(new THREE.Vector3(0, 0, -1), newBounds.max.z),   // z <= max.z
+      new THREE.Plane(new THREE.Vector3(-1, 0, 0), newBounds.min.x),   // x >= min.x
+      new THREE.Plane(new THREE.Vector3(1, 0, 0), -newBounds.max.x),   // x <= max.x
+      new THREE.Plane(new THREE.Vector3(0, -1, 0), newBounds.min.y),   // y >= min.y
+      new THREE.Plane(new THREE.Vector3(0, 1, 0), -newBounds.max.y),   // y <= max.y
+      new THREE.Plane(new THREE.Vector3(0, 0, -1), newBounds.min.z),   // z >= min.z
+      new THREE.Plane(new THREE.Vector3(0, 0, 1), -newBounds.max.z),   // z <= max.z
     ];
 
-    targetObject.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material) {
+    // Aplicar a todos los objetos relevantes en la escena
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material && !child.userData.isSectionBox && !child.userData.isUI) {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         materials.forEach((material) => {
           material.clippingPlanes = planes;
-          material.clipIntersection = true;
+          material.clipShadows = true;
           material.needsUpdate = true;
         });
       }
-      if (child instanceof THREE.Points && child.material) {
+      if (child instanceof THREE.Points && child.material && !child.userData.isSectionBox) {
         child.material.clippingPlanes = planes;
-        child.material.clipIntersection = true;
+        child.material.clipShadows = true;
         child.material.needsUpdate = true;
       }
     });
@@ -83,17 +87,15 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
 
   // Remover clipping planes
   const removeClipping = () => {
-    if (!targetObject) return;
-
-    targetObject.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material) {
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material && !child.userData.isSectionBox) {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         materials.forEach((material) => {
           material.clippingPlanes = [];
           material.needsUpdate = true;
         });
       }
-      if (child instanceof THREE.Points && child.material) {
+      if (child instanceof THREE.Points && child.material && !child.userData.isSectionBox) {
         child.material.clippingPlanes = [];
         child.material.needsUpdate = true;
       }
@@ -107,7 +109,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     } else {
       removeClipping();
     }
-  }, [bounds, isActive, targetObject]);
+  }, [bounds, isActive, scene]);
 
   // Limpiar cuando se desactiva
   useEffect(() => {
@@ -135,37 +137,31 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     setDragHandle(handle);
     onDragStateChange?.(true);
     
-    gl.domElement.style.cursor = 'grabbing';
-  };
-
-  const handlePointerMove = (event: MouseEvent) => {
-    if (!isDragging || !dragHandle || !bounds) return;
-
+    // Guardar posición inicial del mouse en mundo
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1
+      ((event.nativeEvent.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.nativeEvent.clientY - rect.top) / rect.height) * 2 + 1
     );
 
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(mouse, camera);
-
-    // Crear un plano para el arrastre basado en el handle
-    const planeNormal = new THREE.Vector3();
-    const center = bounds.min.clone().lerp(bounds.max, 0.5);
+    raycaster.current.setFromCamera(mouse, camera);
     
-    switch (dragHandle) {
+    // Crear un plano para el arrastre
+    const center = bounds.min.clone().lerp(bounds.max, 0.5);
+    let planeNormal = new THREE.Vector3();
+    
+    switch (handle) {
       case 'x-min':
       case 'x-max':
-        planeNormal.set(0, 1, 0); // plano YZ
+        planeNormal.set(0, 0, 1);
         break;
       case 'y-min':
       case 'y-max':
-        planeNormal.set(1, 0, 0); // plano XZ
+        planeNormal.set(1, 0, 1);
         break;
       case 'z-min':
       case 'z-max':
-        planeNormal.set(0, 1, 0); // plano XY
+        planeNormal.set(1, 0, 0);
         break;
     }
 
@@ -173,7 +169,48 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     dragPlane.setFromNormalAndCoplanarPoint(planeNormal, center);
     
     const intersection = new THREE.Vector3();
-    if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
+    if (raycaster.current.ray.intersectPlane(dragPlane, intersection)) {
+      setDragStart(intersection);
+    }
+
+    gl.domElement.style.cursor = 'grabbing';
+  };
+
+  const handlePointerMove = (event: MouseEvent) => {
+    if (!isDragging || !dragHandle || !bounds || !dragStart) return;
+
+    const rect = gl.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    raycaster.current.setFromCamera(mouse, camera);
+
+    // Crear plano de arrastre basado en el handle
+    const center = bounds.min.clone().lerp(bounds.max, 0.5);
+    let planeNormal = new THREE.Vector3();
+    
+    switch (dragHandle) {
+      case 'x-min':
+      case 'x-max':
+        planeNormal.set(0, 0, 1);
+        break;
+      case 'y-min':
+      case 'y-max':
+        planeNormal.set(1, 0, 1);
+        break;
+      case 'z-min':
+      case 'z-max':
+        planeNormal.set(1, 0, 0);
+        break;
+    }
+
+    const dragPlane = new THREE.Plane(planeNormal, 0);
+    dragPlane.setFromNormalAndCoplanarPoint(planeNormal, center);
+    
+    const intersection = new THREE.Vector3();
+    if (raycaster.current.ray.intersectPlane(dragPlane, intersection)) {
       const newBounds = {
         min: bounds.min.clone(),
         max: bounds.max.clone(),
@@ -209,6 +246,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   const handlePointerUp = () => {
     setIsDragging(false);
     setDragHandle(null);
+    setDragStart(null);
     onDragStateChange?.(false);
     gl.domElement.style.cursor = 'default';
   };
@@ -225,7 +263,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
         canvas.removeEventListener('pointerup', handlePointerUp);
       };
     }
-  }, [isDragging, dragHandle, bounds]);
+  }, [isDragging, dragHandle, bounds, dragStart]);
 
   if (!bounds || !isActive || !targetObject) {
     return null;

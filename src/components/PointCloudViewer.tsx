@@ -1,4 +1,3 @@
-
 import React, {
   useState,
   useRef,
@@ -252,28 +251,21 @@ export const PointCloudViewer: React.FC = () => {
     /* -- Limpiamos clipping cuando se desactiva la herramienta -------------- */
     useEffect(() => {
       if (!sectionBoxActive) {
-        loadedFiles.forEach((file) => {
-          if (file.type === 'ifc') {
-            (file.data as IFCGeometry).meshes.forEach((mesh) => {
-              const mats = Array.isArray(mesh.material)
-                ? mesh.material
-                : [mesh.material];
-              mats.forEach((mat) => {
-                mat.clippingPlanes = [];
-                mat.needsUpdate = true;
-              });
+        scene.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material && !child.userData.isSectionBox) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((material) => {
+              material.clippingPlanes = [];
+              material.needsUpdate = true;
             });
           }
-        });
-
-        scene.traverse((child) => {
-          if (child instanceof THREE.Points && child.material) {
+          if (child instanceof THREE.Points && child.material && !child.userData.isSectionBox) {
             child.material.clippingPlanes = [];
             child.material.needsUpdate = true;
           }
         });
       }
-    }, [sectionBoxActive, loadedFiles, scene]);
+    }, [sectionBoxActive, scene]);
 
     return (
       <>
@@ -299,6 +291,7 @@ export const PointCloudViewer: React.FC = () => {
           {/* Selector de objetos (para Sección/Transformación) */}
           <ObjectSelector
             isActive={sectionBoxActive || transformActive}
+            isDragging={isDragging}
             onObjectHover={() => {}}
             onObjectSelect={handleObjectSelection}
           />
@@ -327,7 +320,7 @@ export const PointCloudViewer: React.FC = () => {
             onDraggingChange={setIsTransformDragging}
           />
 
-          {/* Controles de cámara - Solo se deshabilitan durante el drag de transform manipulator */}
+          {/* Controles de cámara */}
           <OrbitControls
             ref={controlsRef}
             enablePan
@@ -336,7 +329,7 @@ export const PointCloudViewer: React.FC = () => {
             zoomSpeed={0.6}
             panSpeed={0.8}
             rotateSpeed={0.4}
-            enabled={!isTransformDragging}
+            enabled={!isTransformDragging && !isDragging}
           />
 
           {/* Stats */}
@@ -412,11 +405,16 @@ export const PointCloudViewer: React.FC = () => {
         gl={{ 
           antialias: true, 
           alpha: true,
-          localClippingEnabled: true  // Importante para el section box
+          localClippingEnabled: true,
+          preserveDrawingBuffer: true
         }}
-        onCreated={({ gl }) => {
+        onCreated={({ gl, scene }) => {
           gl.localClippingEnabled = true;
           gl.setClearColor('#1a1a1a', 1);
+          
+          // Configurar el renderer para clipping
+          gl.clippingPlanes = [];
+          gl.localClippingEnabled = true;
         }}
       >
         <InternalScene />
