@@ -5,7 +5,7 @@ import { useThree, ThreeEvent } from '@react-three/fiber';
 interface SectionBoxProps {
   /**
    * Si la herramienta de seccionado está activa.
-   * ⚠️ No cambies esta prop durante el drag; si la pones en `false` en
+   * ⚠️ No cambies esta prop durante el drag; si la pones en `false` en
    * `onDragStateChange(false)` el componente se desmonta y pierde los bounds.
    */
   isActive: boolean;
@@ -18,10 +18,10 @@ interface SectionBoxProps {
 }
 
 /**
- * SectionBox — opción 2 (metros-por-píxel)
+ * SectionBox — opción 2 (metros‑por‑píxel)
  * ▸ Velocidad consistente.
  * ▸ ⇧ = modo fino.
- * ▸ Snapping 0.05 u.
+ * ▸ Snapping 0.05 u.
  */
 export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateChange }) => {
   /* ─── state ─── */
@@ -103,7 +103,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [isActive]);
 
-  /* ─── marcar elementos section-box ─── */
+  /* ─── marcar elementos section‑box ─── */
   useEffect(() => { boxRef.current?.traverse((c) => (c.userData.isSectionBox = true)); }, [bounds]);
 
   /* ─── pointer down ─── */
