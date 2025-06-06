@@ -1,26 +1,31 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
+    /* ——————— AQUÍ ESTÁ LA CLAVE ——————— */
+    "jsx": "react-jsx",
+    "jsxImportSource": "@react-three/fiber",
+    /* ———————————————————————————————— */
+
+    /* lo que ya tenías                                   */
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
-
-    /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",
     "noEmit": true,
-    "jsx": "react-jsx",
 
-    /* Linting */
+    /* linting */
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noImplicitAny": false,
     "noFallthroughCasesInSwitch": false,
 
+    /* paths que ya tenías */
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
