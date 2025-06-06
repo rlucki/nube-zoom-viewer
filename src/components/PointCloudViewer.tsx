@@ -409,7 +409,11 @@ export const PointCloudViewer: React.FC = () => {
       <Canvas
         camera={{ position: [50, 50, 50], fov: 60, near: 0.01, far: 100000 }}
         className="absolute inset-0"
-        gl={{ antialias: true, alpha: true }}
+        gl={{ 
+          antialias: true, 
+          alpha: true,
+          localClippingEnabled: true  // Importante para el section box
+        }}
         onCreated={({ gl }) => {
           gl.localClippingEnabled = true;
           gl.setClearColor('#1a1a1a', 1);
