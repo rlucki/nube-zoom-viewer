@@ -1,4 +1,8 @@
-/** @jsxImportSource @react-three/fiber */
+/**
+ * Note: The previous JSX import source caused build issues because
+ * TypeScript could not resolve `@react-three/fiber/jsx-runtime`.
+ * The component still works without it, so we remove the directive.
+ */
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
@@ -38,6 +42,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
 
   /* calcular bounds iniciales */
   useEffect(() => {
+    console.log('SectionBox compute initial', { isActive, userModified, hasBounds: !!bounds });
     if (isActive && !userModified && !bounds) {
       const globalBox = new THREE.Box3();
       let has = false;
@@ -69,15 +74,23 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
       if (has && !globalBox.isEmpty()) {
         const s = globalBox.getSize(new THREE.Vector3());
         globalBox.expandByScalar(Math.max(s.x, s.y, s.z) * 0.05);
-        setBounds({ min: globalBox.min.clone(), max: globalBox.max.clone() });
+        const next = { min: globalBox.min.clone(), max: globalBox.max.clone() };
+        console.log('SectionBox init bounds', next);
+        setBounds(next);
       } else {
-        setBounds({ min: new THREE.Vector3(-10, -10, -10), max: new THREE.Vector3(10, 10, 10) });
+        const next = {
+          min: new THREE.Vector3(-10, -10, -10),
+          max: new THREE.Vector3(10, 10, 10),
+        };
+        console.log('SectionBox default bounds', next);
+        setBounds(next);
       }
     }
   }, [isActive, scene, userModified, bounds]);
 
   /* clipping */
   const applyClipping = (b: { min: THREE.Vector3; max: THREE.Vector3 }) => {
+    console.log('SectionBox apply clipping', b);
     const planes = [
       new THREE.Plane(new THREE.Vector3(1, 0, 0), -b.min.x),
       new THREE.Plane(new THREE.Vector3(-1, 0, 0), b.max.x),
@@ -97,6 +110,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     });
   };
   const removeClipping = () => {
+    console.log('SectionBox remove clipping');
     scene.traverse((child) => {
       if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && !child.userData.isSectionBox) {
         const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -108,7 +122,8 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     });
   };
   useEffect(() => {
-    if (isActive && bounds) applyClipping(bounds); else removeClipping();
+    if (isActive && bounds) applyClipping(bounds);
+    else removeClipping();
   }, [isActive, bounds]);
 
   /* desactivar */
@@ -132,6 +147,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     setIsDragging(true);
     setDragHandle(handle);
     setDragAxis(handle.charAt(0) as 'x' | 'y' | 'z');
+    console.log('SectionBox pointer down', handle);
     onDragStateChange?.(true);
     gl.domElement.style.cursor = 'grabbing';
   };
@@ -154,6 +170,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
       const minSize = 0.1;
       if (dragHandle.endsWith('min')) nb.min[dragAxis] = Math.min(nb.min[dragAxis] + delta, nb.max[dragAxis] - minSize);
       else nb.max[dragAxis] = Math.max(nb.max[dragAxis] + delta, nb.min[dragAxis] + minSize);
+      console.log('SectionBox move', dragHandle, nb);
       return nb;
     });
     setUserModified(true);
@@ -164,6 +181,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     setIsDragging(false);
     setDragHandle(null);
     setDragAxis(null);
+    console.log('SectionBox pointer up');
     onDragStateChange?.(false);
     gl.domElement.style.cursor = 'default';
   };
