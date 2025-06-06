@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
@@ -9,10 +8,10 @@ interface SectionBoxProps {
 }
 
 /**
- * SectionBox — opción 2 (metros‑por‑píxel)
+ * SectionBox — opción 2 (metros‑por‑píxel)
  * ▸ Velocidad consistente.
  * ▸ ⇧=modo fino.
- * ▸ Snapping 0.05 u.
+ * ▸ Snapping 0.05 u.
  */
 export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateChange }) => {
   /* state */
