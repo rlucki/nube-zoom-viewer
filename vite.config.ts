@@ -1,28 +1,27 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react-swc';
-import path from 'path';
-import { componentTagger } from 'lovable-tagger';
 
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react-swc";
+import path from "path";
+import { componentTagger } from "lovable-tagger";
+
+// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  server: { host: '::', port: 8080 },
-
+  server: {
+    host: "::",
+    port: 8080,
+  },
   plugins: [
-    react({
-      jsxRuntime: 'automatic',
-      jsxImportSource: '@react-three/fiber',
-    }),
-    mode === 'development' && componentTagger(),
+    react(),
+    mode === 'development' &&
+    componentTagger(),
   ].filter(Boolean),
-
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      // 👇 hace que jsx-dev-runtime apunte al que sí existe
-      '@react-three/fiber/jsx-dev-runtime':
-        '@react-three/fiber/jsx-runtime',
+      "@": path.resolve(__dirname, "./src"),
     },
   },
-
-  assetsInclude: ['**/*.wasm'],
-  optimizeDeps: { exclude: ['web-ifc'] },
+  assetsInclude: ['**/*.wasm'], // Incluye archivos WASM como assets
+  optimizeDeps: {
+    exclude: ['web-ifc'] // Excluye web-ifc del pre-bundling para evitar problemas con WASM
+  }
 }));
