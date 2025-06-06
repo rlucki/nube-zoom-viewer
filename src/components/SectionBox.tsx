@@ -3,7 +3,17 @@ import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 
 interface SectionBoxProps {
+  /**
+   * Si la herramienta de seccionado está activa.  
+   * ⚠️ No cambies esta prop durante el drag; si la pones en `false` en
+   * `onDragStateChange(false)` el componente se desmonta y pierde los bounds.
+   */
   isActive: boolean;
+  /**
+   * Callback que notifica cuándo empieza (`true`) o termina (`false`) el drag
+   * de algún handle. Úsalo solo para feedback de UI, **no para desactivar la
+   * herramienta**.
+   */
   onDragStateChange?: (isDragging: boolean) => void;
 }
 
@@ -180,36 +190,4 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
       {/* wireframe */}
       <mesh position={center} userData={{ isSectionBox: true }}>
         <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial wireframe color="#00FFFF" transparent opacity={0.8} depthTest={false} />
-      </mesh>
-      {/* semi‑transparente */}
-      <mesh position={center} userData={{ isSectionBox: true }}>
-        <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial color="#00FFFF" transparent opacity={0.1} side={THREE.DoubleSide} depthTest={false} />
-      </mesh>
-      {/* handles */}
-      {[
-        { h: 'x-min', p: [bounds.min.x, center.y, center.z], c: '#ff0000' },
-        { h: 'x-max', p: [bounds.max.x, center.y, center.z], c: '#ff0000' },
-        { h: 'y-min', p: [center.x, bounds.min.y, center.z], c: '#00ff00' },
-        { h: 'y-max', p: [center.x, bounds.max.y, center.z], c: '#00ff00' },
-        { h: 'z-min', p: [center.x, center.y, bounds.min.z], c: '#0000ff' },
-        { h: 'z-max', p: [center.x, center.y, bounds.max.z], c: '#0000ff' },
-      ].map(({ h, p, c }) => (
-        <mesh
-          key={h}
-          position={p as [number, number, number]}
-          userData={{ isSectionBox: true }}
-          onPointerDown={(e) => handlePointerDown(e, h)}
-          onPointerEnter={() => (gl.domElement.style.cursor = 'grab')}
-          onPointerLeave={() => {
-            if (!isDragging) gl.domElement.style.cursor = 'default';
-          }}
-        >
-          <sphereGeometry args={[0.3, 16, 16]} />
-          <meshBasicMaterial color={c} transparent opacity={0.9} depthTest={false} />
-        </mesh>
-      ))}
-    </group>
-  );
-};
+        <meshBasic
