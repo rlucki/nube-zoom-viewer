@@ -8,31 +8,23 @@ interface SectionBoxProps {
 }
 
 /**
- * SectionBox — Versión “opción 2”
- *
- * Los handles se mueven en función de los píxeles desplazados
- * multiplicados por los “metros por píxel” en el plano de la caja.
- * Mantén ⇧-Shift para modo fino (×0.1).
+ * SectionBox — Opción 2 (metros‑por‑píxel) ✅
+ * Ahora los cambios se conservan al soltar el ratón gracias a
+ * la actualización funcional de `setBounds`.
  */
 export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateChange }) => {
-  /* ------------------------------------------------------------------ */
-  /*  State                                                             */
-  /* ------------------------------------------------------------------ */
+  /* ------------------------------ state ----------------------------- */
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragHandle, setDragHandle] = useState<string | null>(null);
   const [dragAxis, setDragAxis] = useState<'x' | 'y' | 'z' | null>(null);
   const [userModified, setUserModified] = useState(false);
 
-  /* ------------------------------------------------------------------ */
-  /*  Refs                                                               */
-  /* ------------------------------------------------------------------ */
+  /* ------------------------------ refs ------------------------------ */
   const boxRef = useRef<THREE.Group>(null);
   const { camera, gl, scene } = useThree();
 
-  /* ------------------------------------------------------------------ */
-  /*  Bounds iniciales                                                   */
-  /* ------------------------------------------------------------------ */
+  /* --------------------------- bounds init -------------------------- */
   useEffect(() => {
     if (isActive && !userModified && !bounds) {
       const globalBox = new THREE.Box3();
@@ -66,21 +58,15 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
 
       if (hasObjects && !globalBox.isEmpty()) {
         const size = globalBox.getSize(new THREE.Vector3());
-        const expansion = Math.max(size.x, size.y, size.z) * 0.05;
-        globalBox.expandByScalar(expansion);
+        globalBox.expandByScalar(Math.max(size.x, size.y, size.z) * 0.05);
         setBounds({ min: globalBox.min.clone(), max: globalBox.max.clone() });
       } else {
-        setBounds({
-          min: new THREE.Vector3(-10, -10, -10),
-          max: new THREE.Vector3(10, 10, 10),
-        });
+        setBounds({ min: new THREE.Vector3(-10, -10, -10), max: new THREE.Vector3(10, 10, 10) });
       }
     }
   }, [isActive, scene, userModified, bounds]);
 
-  /* ------------------------------------------------------------------ */
-  /*  Clipping                                                          */
-  /* ------------------------------------------------------------------ */
+  /* ---------------------------- clipping ---------------------------- */
   const applyClipping = (b: { min: THREE.Vector3; max: THREE.Vector3 }) => {
     const planes = [
       new THREE.Plane(new THREE.Vector3(1, 0, 0), -b.min.x),
@@ -99,8 +85,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
         !child.name.includes('grid')
       ) {
         if (child instanceof THREE.Mesh && child.material) {
-          const mats = Array.isArray(child.material) ? child.material : [child.material];
-          mats.forEach((m) => {
+          (Array.isArray(child.material) ? child.material : [child.material]).forEach((m) => {
             m.clippingPlanes = planes;
             m.clipShadows = true;
             m.needsUpdate = true;
@@ -117,24 +102,18 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
   const removeClipping = () => {
     scene.traverse((child) => {
       if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && !child.userData.isSectionBox) {
-        if (child.material) {
-          const mats = Array.isArray(child.material) ? child.material : [child.material];
-          mats.forEach((m) => {
-            m.clippingPlanes = [];
-            m.needsUpdate = true;
-          });
-        }
+        (Array.isArray(child.material) ? child.material : [child.material]).forEach((m) => {
+          m.clippingPlanes = [];
+          m.needsUpdate = true;
+        });
       }
     });
   };
   useEffect(() => {
-    if (isActive && bounds) applyClipping(bounds);
-    else removeClipping();
+    (isActive && bounds) ? applyClipping(bounds) : removeClipping();
   }, [isActive, bounds]);
 
-  /* ------------------------------------------------------------------ */
-  /*  Limpieza al desactivar                                            */
-  /* ------------------------------------------------------------------ */
+  /* --------------------------- deactivate --------------------------- */
   useEffect(() => {
     if (!isActive) {
       removeClipping();
@@ -143,16 +122,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [isActive]);
 
-  /* ------------------------------------------------------------------ */
-  /*  Marcar hijos como section-box                                     */
-  /* ------------------------------------------------------------------ */
+  /* ----------------------- mark section‑box ------------------------- */
   useEffect(() => {
-    if (boxRef.current) boxRef.current.traverse((c) => (c.userData.isSectionBox = true));
+    boxRef.current?.traverse((c) => (c.userData.isSectionBox = true));
   }, [bounds]);
 
-  /* ------------------------------------------------------------------ */
-  /*  Pointer handlers                                                  */
-  /* ------------------------------------------------------------------ */
+  /* -------------------- pointer down / move / up ------------------- */
   const handlePointerDown = (e: ThreeEvent<PointerEvent>, handle: string) => {
     if (!bounds) return;
     e.stopPropagation();
@@ -164,40 +139,37 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
   };
 
   const handlePointerMove = (e: PointerEvent) => {
-    if (!isDragging || !bounds || !dragHandle || !dragAxis) return;
+    if (!isDragging || !dragHandle || !dragAxis) return;
 
-    /* ---- calcular metros por píxel (vertical) ---- */
-    const rect = gl.domElement.getBoundingClientRect();
-    const center = bounds.min.clone().lerp(bounds.max, 0.5);
-    const distance = camera.position.distanceTo(center);
-    const fovRad = THREE.MathUtils.degToRad((camera as THREE.PerspectiveCamera).fov);
-    const worldPerPixel = (2 * Math.tan(fovRad / 2) * distance) / rect.height; // metros / pixel
+    setBounds((prev) => {
+      if (!prev) return prev;
 
-    /* ---- delta en píxeles según eje ---- */
-    let deltaPx = 0;
-    if (dragAxis === 'x') deltaPx = e.movementX;
-    else if (dragAxis === 'y') deltaPx = -e.movementY; // invertido: pantalla ↓, mundo -Y
-    else if (dragAxis === 'z') deltaPx = e.movementY;  // aproximación
+      /* cuánto mundo por píxel */
+      const rect = gl.domElement.getBoundingClientRect();
+      const center = prev.min.clone().lerp(prev.max, 0.5);
+      const dist = camera.position.distanceTo(center);
+      const wpp = (2 * Math.tan(THREE.MathUtils.degToRad((camera as THREE.PerspectiveCamera).fov) / 2) * dist) / rect.height;
 
-    if (deltaPx === 0) return;
+      /* delta píxel → mundo */
+      let deltaPx = 0;
+      if (dragAxis === 'x') deltaPx = e.movementX;
+      else if (dragAxis === 'y') deltaPx = -e.movementY;
+      else deltaPx = e.movementY;
+      if (deltaPx === 0) return prev;
 
-    const speed = e.shiftKey ? 0.1 : 1; // modo fino
-    let delta = deltaPx * worldPerPixel * speed;
+      const scale = e.shiftKey ? 0.1 : 1;
+      let delta = deltaPx * wpp * scale;
 
-    /* ---- snapping opcional ---- */
-    const step = 0.05;
-    delta = Math.round(delta / step) * step;
-    if (delta === 0) return;
+      const step = 0.05;
+      delta = Math.round(delta / step) * step;
+      if (delta === 0) return prev;
 
-    /* ---- aplicar delta ---- */
-    const newBounds = { min: bounds.min.clone(), max: bounds.max.clone() };
-    const minSize = 0.1;
-    if (dragHandle.endsWith('min')) {
-      newBounds.min[dragAxis] = Math.min(newBounds.min[dragAxis] + delta, newBounds.max[dragAxis] - minSize);
-    } else {
-      newBounds.max[dragAxis] = Math.max(newBounds.max[dragAxis] + delta, newBounds.min[dragAxis] + minSize);
-    }
-    setBounds(newBounds);
+      const nb = { min: prev.min.clone(), max: prev.max.clone() };
+      const minSize = 0.1;
+      if (dragHandle.endsWith('min')) nb.min[dragAxis] = Math.min(nb.min[dragAxis] + delta, nb.max[dragAxis] - minSize);
+      else nb.max[dragAxis] = Math.max(nb.max[dragAxis] + delta, nb.min[dragAxis] + minSize);
+      return nb;
+    });
     setUserModified(true);
   };
 
@@ -209,9 +181,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     gl.domElement.style.cursor = 'default';
   };
 
-  /* ------------------------------------------------------------------ */
-  /*  Listeners globales                                                */
-  /* ------------------------------------------------------------------ */
+  /* ----------------------- global listeners ------------------------ */
   useEffect(() => {
     if (isDragging) {
       const c = gl.domElement;
@@ -222,11 +192,9 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
         c.removeEventListener('pointerup', handlePointerUp);
       };
     }
-  }, [isDragging, bounds, dragHandle, dragAxis]);
+  }, [isDragging, dragHandle, dragAxis]);
 
-  /* ------------------------------------------------------------------ */
-  /*  Render                                                            */
-  /* ------------------------------------------------------------------ */
+  /* --------------------------- render ------------------------------ */
   if (!bounds || !isActive) return null;
   const center = bounds.min.clone().lerp(bounds.max, 0.5);
   const size = bounds.max.clone().sub(bounds.min);
@@ -235,37 +203,4 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     <group ref={boxRef}>
       {/* Wireframe */}
       <mesh position={center} userData={{ isSectionBox: true }}>
-        <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial wireframe color="#00FFFF" transparent opacity={0.8} depthTest={false} />
-      </mesh>
-      {/* Caja transparente */}
-      <mesh position={center} userData={{ isSectionBox: true }}>
-        <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial color="#00FFFF" transparent opacity={0.1} side={THREE.DoubleSide} depthTest={false} />
-      </mesh>
-      {/* Handles */}
-      {[
-        { handle: 'x-min', pos: [bounds.min.x, center.y, center.z], color: '#ff0000' },
-        { handle: 'x-max', pos: [bounds.max.x, center.y, center.z], color: '#ff0000' },
-        { handle: 'y-min', pos: [center.x, bounds.min.y, center.z], color: '#00ff00' },
-        { handle: 'y-max', pos: [center.x, bounds.max.y, center.z], color: '#00ff00' },
-        { handle: 'z-min', pos: [center.x, center.y, bounds.min.z], color: '#0000ff' },
-        { handle: 'z-max', pos: [center.x, center.y, bounds.max.z], color: '#0000ff' },
-      ].map((h) => (
-        <mesh
-          key={h.handle}
-          position={h.pos as [number, number, number]}
-          userData={{ isSectionBox: true }}
-          onPointerDown={(e) => handlePointerDown(e, h.handle)}
-          onPointerEnter={() => (gl.domElement.style.cursor = 'grab')}          
-          onPointerLeave={() => {
-            if (!isDragging) gl.domElement.style.cursor = 'default';
-          }}
-        >
-          <sphereGeometry args={[0.3, 16, 16]} />
-          <meshBasicMaterial color={h.color} transparent opacity={0.9} depthTest={false} />
-        </mesh>
-      ))}
-    </group>
-  );
-};
+        <boxGeometry args
