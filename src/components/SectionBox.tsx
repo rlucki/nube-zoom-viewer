@@ -1,8 +1,3 @@
-/**
- * Note: The previous JSX import source caused build issues because
- * TypeScript could not resolve `@react-three/fiber/jsx-runtime`.
- * The component still works without it, so we remove the directive.
- */
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
@@ -23,74 +18,57 @@ interface SectionBoxProps {
 }
 
 /**
- * SectionBox - opción 2 (metros-por-píxel)
+ * SectionBox — opción 2 (metros-por-píxel)
  * ▸ Velocidad consistente.
- * ▸ ⇧=modo fino.
+ * ▸ ⇧ = modo fino.
  * ▸ Snapping 0.05 u.
  */
 export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateChange }) => {
-  /* state */
+  /* ─── state ─── */
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragHandle, setDragHandle] = useState<string | null>(null);
   const [dragAxis, setDragAxis] = useState<'x' | 'y' | 'z' | null>(null);
   const [userModified, setUserModified] = useState(false);
 
-  /* refs */
+  /* ─── refs ─── */
   const boxRef = useRef<THREE.Group>(null);
   const { camera, gl, scene } = useThree();
 
-  /* calcular bounds iniciales */
+  /* ─── calcular bounds iniciales ─── */
   useEffect(() => {
-    console.log('SectionBox compute initial', { isActive, userModified, hasBounds: !!bounds });
     if (isActive && !userModified && !bounds) {
       const globalBox = new THREE.Box3();
       let has = false;
       scene.traverse((child) => {
-        if (
-          (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
-          !child.userData.isSectionBox &&
-          !child.userData.isUI &&
-          !child.name.includes('helper') &&
-          !child.name.includes('grid')
-        ) {
+        if ((child instanceof THREE.Mesh || child instanceof THREE.Points) &&
+            !child.userData.isSectionBox &&
+            !child.userData.isUI &&
+            !child.name.includes('helper') &&
+            !child.name.includes('grid')) {
           if (child instanceof THREE.Mesh) {
             const b = new THREE.Box3().setFromObject(child);
-            if (!b.isEmpty()) {
-              globalBox.union(b);
-              has = true;
-            }
+            if (!b.isEmpty()) { globalBox.union(b); has = true; }
           }
           if (child instanceof THREE.Points && child.geometry.boundingBox) {
             const b = child.geometry.boundingBox.clone();
             b.applyMatrix4(child.matrixWorld);
-            if (!b.isEmpty()) {
-              globalBox.union(b);
-              has = true;
-            }
+            if (!b.isEmpty()) { globalBox.union(b); has = true; }
           }
         }
       });
       if (has && !globalBox.isEmpty()) {
         const s = globalBox.getSize(new THREE.Vector3());
         globalBox.expandByScalar(Math.max(s.x, s.y, s.z) * 0.05);
-        const next = { min: globalBox.min.clone(), max: globalBox.max.clone() };
-        console.log('SectionBox init bounds', next);
-        setBounds(next);
+        setBounds({ min: globalBox.min.clone(), max: globalBox.max.clone() });
       } else {
-        const next = {
-          min: new THREE.Vector3(-10, -10, -10),
-          max: new THREE.Vector3(10, 10, 10),
-        };
-        console.log('SectionBox default bounds', next);
-        setBounds(next);
+        setBounds({ min: new THREE.Vector3(-10, -10, -10), max: new THREE.Vector3(10, 10, 10) });
       }
     }
   }, [isActive, scene, userModified, bounds]);
 
-  /* clipping */
+  /* ─── clipping ─── */
   const applyClipping = (b: { min: THREE.Vector3; max: THREE.Vector3 }) => {
-    console.log('SectionBox apply clipping', b);
     const planes = [
       new THREE.Plane(new THREE.Vector3(1, 0, 0), -b.min.x),
       new THREE.Plane(new THREE.Vector3(-1, 0, 0), b.max.x),
@@ -102,31 +80,21 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     scene.traverse((child) => {
       if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && !child.userData.isSectionBox) {
         const mats = Array.isArray(child.material) ? child.material : [child.material];
-        mats.forEach((m) => {
-          m.clippingPlanes = planes;
-          m.needsUpdate = true;
-        });
+        mats.forEach((m) => { m.clippingPlanes = planes; m.needsUpdate = true; });
       }
     });
   };
   const removeClipping = () => {
-    console.log('SectionBox remove clipping');
     scene.traverse((child) => {
       if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && !child.userData.isSectionBox) {
         const mats = Array.isArray(child.material) ? child.material : [child.material];
-        mats.forEach((m) => {
-          m.clippingPlanes = [];
-          m.needsUpdate = true;
-        });
+        mats.forEach((m) => { m.clippingPlanes = []; m.needsUpdate = true; });
       }
     });
   };
-  useEffect(() => {
-    if (isActive && bounds) applyClipping(bounds);
-    else removeClipping();
-  }, [isActive, bounds]);
+  useEffect(() => { (isActive && bounds) ? applyClipping(bounds) : removeClipping(); }, [isActive, bounds]);
 
-  /* desactivar */
+  /* ─── desactivar ─── */
   useEffect(() => {
     if (!isActive) {
       removeClipping();
@@ -135,24 +103,21 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [isActive]);
 
-  /* mark sectionbox */
-  useEffect(() => {
-    boxRef.current?.traverse((c) => (c.userData.isSectionBox = true));
-  }, [bounds]);
+  /* ─── marcar elementos section-box ─── */
+  useEffect(() => { boxRef.current?.traverse((c) => (c.userData.isSectionBox = true)); }, [bounds]);
 
-  /* pointer down */
+  /* ─── pointer down ─── */
   const handlePointerDown = (e: ThreeEvent<PointerEvent>, handle: string) => {
     if (!bounds) return;
     e.stopPropagation();
     setIsDragging(true);
     setDragHandle(handle);
     setDragAxis(handle.charAt(0) as 'x' | 'y' | 'z');
-    console.log('SectionBox pointer down', handle);
     onDragStateChange?.(true);
     gl.domElement.style.cursor = 'grabbing';
   };
 
-  /* pointer move */
+  /* ─── pointer move ─── */
   const handlePointerMove = (e: PointerEvent) => {
     if (!isDragging || !dragHandle || !dragAxis) return;
     setBounds((prev) => {
@@ -170,23 +135,21 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
       const minSize = 0.1;
       if (dragHandle.endsWith('min')) nb.min[dragAxis] = Math.min(nb.min[dragAxis] + delta, nb.max[dragAxis] - minSize);
       else nb.max[dragAxis] = Math.max(nb.max[dragAxis] + delta, nb.min[dragAxis] + minSize);
-      console.log('SectionBox move', dragHandle, nb);
       return nb;
     });
     setUserModified(true);
   };
 
-  /* pointer up */
+  /* ─── pointer up ─── */
   const handlePointerUp = () => {
     setIsDragging(false);
     setDragHandle(null);
     setDragAxis(null);
-    console.log('SectionBox pointer up');
     onDragStateChange?.(false);
     gl.domElement.style.cursor = 'default';
   };
 
-  /* listeners */
+  /* ─── listeners globales ─── */
   useEffect(() => {
     if (isDragging) {
       const c = gl.domElement;
@@ -199,38 +162,41 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [isDragging, dragHandle, dragAxis]);
 
-  /* render */
+  /* ─── render ─── */
   if (!bounds || !isActive) return null;
   const center = bounds.min.clone().lerp(bounds.max, 0.5);
   const size = bounds.max.clone().sub(bounds.min);
+
   return (
     <group ref={boxRef}>
       {/* wireframe */}
       <mesh position={center} userData={{ isSectionBox: true }}>
         <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial color="white" wireframe transparent opacity={0.5} />
+        <meshBasicMaterial color="#00FFFF" wireframe transparent opacity={0.6} depthTest={false} />
+      </mesh>
+      {/* semitransparente */}
+      <mesh position={center} userData={{ isSectionBox: true }}>
+        <boxGeometry args={[size.x, size.y, size.z]} />
+        <meshBasicMaterial color="#00FFFF" transparent opacity={0.08} side={THREE.DoubleSide} depthTest={false} />
       </mesh>
       {/* handles */}
       {([
-        ['x', 'min', [bounds.min.x, center.y, center.z]],
-        ['x', 'max', [bounds.max.x, center.y, center.z]],
-        ['y', 'min', [center.x, bounds.min.y, center.z]],
-        ['y', 'max', [center.x, bounds.max.y, center.z]],
-        ['z', 'min', [center.x, center.y, bounds.min.z]],
-        ['z', 'max', [center.x, center.y, bounds.max.z]],
-      ] as const).map(([axis, posType, position]) => (
+        ['x-min', [bounds.min.x, center.y, center.z]],
+        ['x-max', [bounds.max.x, center.y, center.z]],
+        ['y-min', [center.x, bounds.min.y, center.z]],
+        ['y-max', [center.x, bounds.max.y, center.z]],
+        ['z-min', [center.x, center.y, bounds.min.z]],
+        ['z-max', [center.x, center.y, bounds.max.z]],
+      ] as const).map(([handle, pos]) => (
         <mesh
-          key={`${axis}-${posType}`}
-          position={position as unknown as THREE.Vector3}
-          onPointerDown={(e) =>
-            handlePointerDown(
-              e as unknown as ThreeEvent<PointerEvent>,
-              `${axis}${posType}`,
-            )
-          }
+          key={handle}
+          position={pos as unknown as THREE.Vector3}
           userData={{ isSectionBox: true }}
+          onPointerDown={(e) => handlePointerDown(e as unknown as ThreeEvent<PointerEvent>, handle)}
+          onPointerEnter={() => (gl.domElement.style.cursor = 'grab')}
+          onPointerLeave={() => { if (!isDragging) gl.domElement.style.cursor = 'default'; }}
         >
-          <boxGeometry args={[0.2, 0.2, 0.2]} />
+          <sphereGeometry args={[0.3, 16, 16]} />
           <meshBasicMaterial color="orange" />
         </mesh>
       ))}
