@@ -1,12 +1,16 @@
-/** @jsxImportSource @react-three/fiber */
+/**
+ * Note: The previous JSX import source caused build issues because
+ * TypeScript could not resolve `@react-three/fiber/jsx-runtime`.
+ * The component still works without it, so we remove the directive.
+ */
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 
 interface SectionBoxProps {
   /**
-   * Si la herramienta de seccionado está activa.  
-   * ⚠️ No cambies esta prop durante el drag; si la pones en `false` en
+   * Si la herramienta de seccionado está activa.
+   * ⚠️ No cambies esta prop durante el drag; si la pones en `false` en
    * `onDragStateChange(false)` el componente se desmonta y pierde los bounds.
    */
   isActive: boolean;
@@ -19,10 +23,10 @@ interface SectionBoxProps {
 }
 
 /**
- * SectionBox — opción 2 (metros‑por‑píxel)
+ * SectionBox - opción 2 (metros-por-píxel)
  * ▸ Velocidad consistente.
  * ▸ ⇧=modo fino.
- * ▸ Snapping 0.05 u.
+ * ▸ Snapping 0.05 u.
  */
 export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateChange }) => {
   /* state */
@@ -38,6 +42,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
 
   /* calcular bounds iniciales */
   useEffect(() => {
+    console.log('SectionBox compute initial', { isActive, userModified, hasBounds: !!bounds });
     if (isActive && !userModified && !bounds) {
       const globalBox = new THREE.Box3();
       let has = false;
@@ -69,15 +74,23 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
       if (has && !globalBox.isEmpty()) {
         const s = globalBox.getSize(new THREE.Vector3());
         globalBox.expandByScalar(Math.max(s.x, s.y, s.z) * 0.05);
-        setBounds({ min: globalBox.min.clone(), max: globalBox.max.clone() });
+        const next = { min: globalBox.min.clone(), max: globalBox.max.clone() };
+        console.log('SectionBox init bounds', next);
+        setBounds(next);
       } else {
-        setBounds({ min: new THREE.Vector3(-10, -10, -10), max: new THREE.Vector3(10, 10, 10) });
+        const next = {
+          min: new THREE.Vector3(-10, -10, -10),
+          max: new THREE.Vector3(10, 10, 10),
+        };
+        console.log('SectionBox default bounds', next);
+        setBounds(next);
       }
     }
   }, [isActive, scene, userModified, bounds]);
 
   /* clipping */
   const applyClipping = (b: { min: THREE.Vector3; max: THREE.Vector3 }) => {
+    console.log('SectionBox apply clipping', b);
     const planes = [
       new THREE.Plane(new THREE.Vector3(1, 0, 0), -b.min.x),
       new THREE.Plane(new THREE.Vector3(-1, 0, 0), b.max.x),
@@ -97,6 +110,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     });
   };
   const removeClipping = () => {
+    console.log('SectionBox remove clipping');
     scene.traverse((child) => {
       if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && !child.userData.isSectionBox) {
         const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -108,7 +122,8 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     });
   };
   useEffect(() => {
-    if (isActive && bounds) applyClipping(bounds); else removeClipping();
+    if (isActive && bounds) applyClipping(bounds);
+    else removeClipping();
   }, [isActive, bounds]);
 
   /* desactivar */
@@ -132,6 +147,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     setIsDragging(true);
     setDragHandle(handle);
     setDragAxis(handle.charAt(0) as 'x' | 'y' | 'z');
+    console.log('SectionBox pointer down', handle);
     onDragStateChange?.(true);
     gl.domElement.style.cursor = 'grabbing';
   };
@@ -145,7 +161,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
       const center = prev.min.clone().lerp(prev.max, 0.5);
       const dist = camera.position.distanceTo(center);
       const wpp = (2 * Math.tan(THREE.MathUtils.degToRad((camera as THREE.PerspectiveCamera).fov) / 2) * dist) / rect.height;
-      let deltaPx = dragAxis === 'x' ? e.movementX : dragAxis === 'y' ? -e.movementY : e.movementY;
+      const deltaPx = dragAxis === 'x' ? e.movementX : dragAxis === 'y' ? -e.movementY : e.movementY;
       if (deltaPx === 0) return prev;
       let delta = deltaPx * wpp * (e.shiftKey ? 0.1 : 1);
       delta = Math.round(delta / 0.05) * 0.05;
@@ -154,6 +170,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
       const minSize = 0.1;
       if (dragHandle.endsWith('min')) nb.min[dragAxis] = Math.min(nb.min[dragAxis] + delta, nb.max[dragAxis] - minSize);
       else nb.max[dragAxis] = Math.max(nb.max[dragAxis] + delta, nb.min[dragAxis] + minSize);
+      console.log('SectionBox move', dragHandle, nb);
       return nb;
     });
     setUserModified(true);
@@ -164,6 +181,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     setIsDragging(false);
     setDragHandle(null);
     setDragAxis(null);
+    console.log('SectionBox pointer up');
     onDragStateChange?.(false);
     gl.domElement.style.cursor = 'default';
   };
@@ -185,10 +203,37 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
   if (!bounds || !isActive) return null;
   const center = bounds.min.clone().lerp(bounds.max, 0.5);
   const size = bounds.max.clone().sub(bounds.min);
-
   return (
     <group ref={boxRef}>
       {/* wireframe */}
       <mesh position={center} userData={{ isSectionBox: true }}>
         <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasic
+        <meshBasicMaterial color="white" wireframe transparent opacity={0.5} />
+      </mesh>
+      {/* handles */}
+      {([
+        ['x', 'min', [bounds.min.x, center.y, center.z]],
+        ['x', 'max', [bounds.max.x, center.y, center.z]],
+        ['y', 'min', [center.x, bounds.min.y, center.z]],
+        ['y', 'max', [center.x, bounds.max.y, center.z]],
+        ['z', 'min', [center.x, center.y, bounds.min.z]],
+        ['z', 'max', [center.x, center.y, bounds.max.z]],
+      ] as const).map(([axis, posType, position]) => (
+        <mesh
+          key={`${axis}-${posType}`}
+          position={position as unknown as THREE.Vector3}
+          onPointerDown={(e) =>
+            handlePointerDown(
+              e as unknown as ThreeEvent<PointerEvent>,
+              `${axis}${posType}`,
+            )
+          }
+          userData={{ isSectionBox: true }}
+        >
+          <boxGeometry args={[0.2, 0.2, 0.2]} />
+          <meshBasicMaterial color="orange" />
+        </mesh>
+      ))}
+    </group>
+  );
+};
