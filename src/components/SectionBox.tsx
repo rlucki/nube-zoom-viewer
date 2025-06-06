@@ -221,6 +221,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
   if (!bounds || !isActive) return null;
   const center = bounds.min.clone().lerp(bounds.max, 0.5);
   const size = bounds.max.clone().sub(bounds.min);
+  // Render the wireframe cube and draggable handles
   return (
     <group ref={boxRef}>
       {/* wireframe */}
