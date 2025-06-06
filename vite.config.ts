@@ -8,8 +8,9 @@ export default defineConfig(({ mode }) => ({
 
   plugins: [
     react({
-      jsxRuntime: 'automatic',              // runtime automático
-      jsxImportSource: '@react-three/fiber' // runtime de R3F
+      // —— Runtime automático + runtime de R3F ——
+      jsxRuntime: 'automatic',
+      jsxImportSource: '@react-three/fiber',
     }),
     mode === 'development' && componentTagger(),
   ].filter(Boolean),
@@ -17,8 +18,9 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      // alias opcional por si falta jsx-dev-runtime
-      '@react-three/fiber/jsx-dev-runtime': '@react-three/fiber/jsx-runtime',
+      // Si tu versión de R3F no trae jsx-dev-runtime, redirígelo:
+      '@react-three/fiber/jsx-dev-runtime':
+        '@react-three/fiber/jsx-runtime',
     },
   },
 

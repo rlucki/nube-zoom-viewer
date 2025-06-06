@@ -1,12 +1,11 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    /* ——————— AQUÍ ESTÁ LA CLAVE ——————— */
+    /* —— Clave para que TypeScript y SWC acepten etiquetas R3F —— */
     "jsx": "react-jsx",
     "jsxImportSource": "@react-three/fiber",
-    /* ———————————————————————————————— */
 
-    /* lo que ya tenías                                   */
+    /* resto de opciones que ya tenías */
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
@@ -25,11 +24,9 @@
     "noImplicitAny": false,
     "noFallthroughCasesInSwitch": false,
 
-    /* paths que ya tenías */
+    /* paths */
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src"]
 }
