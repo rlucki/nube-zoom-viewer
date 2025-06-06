@@ -35,6 +35,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
   const [dragHandle, setDragHandle] = useState<string | null>(null);
   const [dragAxis, setDragAxis] = useState<'x' | 'y' | 'z' | null>(null);
   const [userModified, setUserModified] = useState(false);
+  const savedBounds = useRef<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
 
   /* refs */
   const boxRef = useRef<THREE.Group>(null);
@@ -43,7 +44,17 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
   /* calcular bounds iniciales */
   useEffect(() => {
     console.log('SectionBox compute initial', { isActive, userModified, hasBounds: !!bounds });
-    if (isActive && !userModified && !bounds) {
+    if (isActive && !bounds) {
+      if (savedBounds.current) {
+        const next = {
+          min: savedBounds.current.min.clone(),
+          max: savedBounds.current.max.clone(),
+        };
+        console.log('SectionBox restore bounds', next);
+        setBounds(next);
+        setUserModified(true);
+        return;
+      }
       const globalBox = new THREE.Box3();
       let has = false;
       scene.traverse((child) => {
@@ -86,7 +97,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
         setBounds(next);
       }
     }
-  }, [isActive, scene, userModified, bounds]);
+  }, [isActive, scene, bounds]);
 
   /* clipping */
   const applyClipping = (b: { min: THREE.Vector3; max: THREE.Vector3 }) => {
@@ -125,6 +136,13 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     if (isActive && bounds) applyClipping(bounds);
     else removeClipping();
   }, [isActive, bounds]);
+
+  /* guardar bounds */
+  useEffect(() => {
+    if (bounds) {
+      savedBounds.current = { min: bounds.min.clone(), max: bounds.max.clone() };
+    }
+  }, [bounds]);
 
   /* desactivar */
   useEffect(() => {
@@ -230,7 +248,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
           }
           userData={{ isSectionBox: true }}
         >
-          <boxGeometry args={[0.2, 0.2, 0.2]} />
+          <boxGeometry args={[0.4, 0.4, 0.4]} />
           <meshBasicMaterial color="orange" />
         </mesh>
       ))}
