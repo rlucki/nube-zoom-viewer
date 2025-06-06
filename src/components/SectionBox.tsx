@@ -16,14 +16,15 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragHandle, setDragHandle] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState<THREE.Vector3 | null>(null);
+  const [userModified, setUserModified] = useState(false);
 
   const boxRef = useRef<THREE.Group>(null);
   const { camera, gl, scene } = useThree();
   const raycaster = useRef(new THREE.Raycaster());
 
-  // Calcular bounds de todos los modelos cuando se activa
+  // Calcular bounds iniciales solo cuando se activa la herramienta y no ha sido modificada por el usuario
   useEffect(() => {
-    if (isActive) {
+    if (isActive && !userModified && !bounds) {
       const globalBox = new THREE.Box3();
       let hasObjects = false;
 
@@ -35,7 +36,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
           !child.name.includes('helper') &&
           !child.name.includes('grid')
         ) {
-          // Para meshes, usar la geometría transformada
           if (child instanceof THREE.Mesh) {
             const box = new THREE.Box3().setFromObject(child);
             if (!box.isEmpty()) {
@@ -44,7 +44,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
             }
           }
           
-          // Para point clouds, usar la bounding box de la geometría
           if (child instanceof THREE.Points && child.geometry.boundingBox) {
             const box = child.geometry.boundingBox.clone();
             box.applyMatrix4(child.matrixWorld);
@@ -57,9 +56,8 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       });
 
       if (hasObjects && !globalBox.isEmpty()) {
-        // Expandir un poco para que se vea bien
         const size = globalBox.getSize(new THREE.Vector3());
-        const expansion = Math.max(size.x, size.y, size.z) * 0.1;
+        const expansion = Math.max(size.x, size.y, size.z) * 0.05;
         globalBox.expandByScalar(expansion);
         
         setBounds({
@@ -67,28 +65,25 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
           max: globalBox.max.clone(),
         });
       } else {
-        // Fallback si no hay objetos
         setBounds({
           min: new THREE.Vector3(-10, -10, -10),
           max: new THREE.Vector3(10, 10, 10),
         });
       }
     }
-  }, [isActive, scene]);
+  }, [isActive, scene, userModified, bounds]);
 
   // Aplicar clipping planes
   const applyClipping = (newBounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
-    // Crear los planos de clipping correctamente orientados
     const planes = [
-      new THREE.Plane(new THREE.Vector3(1, 0, 0), -newBounds.min.x),   // x >= min.x
-      new THREE.Plane(new THREE.Vector3(-1, 0, 0), newBounds.max.x),   // x <= max.x
-      new THREE.Plane(new THREE.Vector3(0, 1, 0), -newBounds.min.y),   // y >= min.y
-      new THREE.Plane(new THREE.Vector3(0, -1, 0), newBounds.max.y),   // y <= max.y
-      new THREE.Plane(new THREE.Vector3(0, 0, 1), -newBounds.min.z),   // z >= min.z
-      new THREE.Plane(new THREE.Vector3(0, 0, -1), newBounds.max.z),   // z <= max.z
+      new THREE.Plane(new THREE.Vector3(1, 0, 0), -newBounds.min.x),
+      new THREE.Plane(new THREE.Vector3(-1, 0, 0), newBounds.max.x),
+      new THREE.Plane(new THREE.Vector3(0, 1, 0), -newBounds.min.y),
+      new THREE.Plane(new THREE.Vector3(0, -1, 0), newBounds.max.y),
+      new THREE.Plane(new THREE.Vector3(0, 0, 1), -newBounds.min.z),
+      new THREE.Plane(new THREE.Vector3(0, 0, -1), newBounds.max.z),
     ];
 
-    // Aplicar a todos los objetos relevantes
     scene.traverse((child) => {
       if (
         (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
@@ -152,6 +147,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     if (!isActive) {
       removeClipping();
       setBounds(null);
+      setUserModified(false);
     }
   }, [isActive]);
 
@@ -187,15 +183,15 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     switch (handle) {
       case 'x-min':
       case 'x-max':
-        planeNormal.set(0, 0, 1);
+        planeNormal.set(1, 0, 0);
         break;
       case 'y-min':
       case 'y-max':
-        planeNormal.set(1, 0, 0);
+        planeNormal.set(0, 1, 0);
         break;
       case 'z-min':
       case 'z-max':
-        planeNormal.set(1, 0, 0);
+        planeNormal.set(0, 0, 1);
         break;
     }
 
@@ -227,15 +223,15 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     switch (dragHandle) {
       case 'x-min':
       case 'x-max':
-        planeNormal.set(0, 0, 1);
+        planeNormal.set(1, 0, 0);
         break;
       case 'y-min':
       case 'y-max':
-        planeNormal.set(1, 0, 0);
+        planeNormal.set(0, 1, 0);
         break;
       case 'z-min':
       case 'z-max':
-        planeNormal.set(1, 0, 0);
+        planeNormal.set(0, 0, 1);
         break;
     }
 
@@ -273,6 +269,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       }
 
       setBounds(newBounds);
+      setUserModified(true); // Marcar que el usuario ha modificado el cubo
     }
   };
 
@@ -352,11 +349,11 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
             if (!isDragging) gl.domElement.style.cursor = 'default';
           }}
         >
-          <sphereGeometry args={[0.5, 16, 16]} />
+          <sphereGeometry args={[0.3, 16, 16]} />
           <meshBasicMaterial
             color={item.color}
             transparent
-            opacity={0.8}
+            opacity={0.9}
             depthTest={false}
           />
         </mesh>
