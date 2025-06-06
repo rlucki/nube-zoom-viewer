@@ -183,37 +183,30 @@ export const PointCloudViewer: React.FC = () => {
     });
   }, [toast]);
 
-  /* -------------------- Selección de objetos (para SectionBox) ------------- */
+  /* -------------------- Selección de objetos (solo para Transform) --------- */
   const handleObjectSelection = useCallback(
     (object: THREE.Object3D | null) => {
       setSelectedObject(object);
-      if (object && (sectionBoxActive || transformActive)) {
+      if (object && transformActive) {
         toast({
-          title: sectionBoxActive
-            ? 'Objeto seleccionado para sección'
-            : 'Objeto seleccionado para transformar',
-          description: sectionBoxActive
-            ? 'Arrastra los controles triangulares para seccionar'
-            : 'Usa los ejes de colores para mover o rotar',
+          title: 'Objeto seleccionado para transformar',
+          description: 'Usa los ejes de colores para mover o rotar',
         });
       }
     },
-    [sectionBoxActive, transformActive, toast],
+    [transformActive, toast],
   );
 
   /* -------------------- Activación herramientas ---------------------------- */
   const handleSectionBoxToggle = useCallback(
     (active: boolean) => {
       setSectionBoxActive(active);
-      if (!active) {
-        setSelectedObject(null);
-      }
       toast({
         title: active
           ? 'Herramienta de sección activada'
           : 'Herramienta de sección desactivada',
         description: active
-          ? 'Haz clic en un modelo para seleccionarlo y crear la caja'
+          ? 'La caja de sección abarca todos los modelos. Arrastra los controles para seccionar.'
           : 'Planos de corte eliminados',
       });
     },
@@ -288,9 +281,9 @@ export const PointCloudViewer: React.FC = () => {
             />
           ))}
 
-          {/* Selector de objetos (para Sección/Transformación) */}
+          {/* Selector de objetos (solo para Transformación) */}
           <ObjectSelector
-            isActive={sectionBoxActive || transformActive}
+            isActive={transformActive}
             isDragging={isDragging}
             onObjectHover={() => {}}
             onObjectSelect={handleObjectSelection}
@@ -305,9 +298,8 @@ export const PointCloudViewer: React.FC = () => {
             onSnapModeChange={setSnapMode}
           />
 
-          {/* Caja de sección */}
+          {/* Caja de sección - ahora funciona automáticamente */}
           <SectionBox
-            targetObject={selectedObject}
             isActive={sectionBoxActive}
             onDragStateChange={setIsDragging}
           />

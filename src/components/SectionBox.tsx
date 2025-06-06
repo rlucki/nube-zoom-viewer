@@ -4,16 +4,12 @@ import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 
 interface SectionBoxProps {
-  targetObject: THREE.Object3D | null;
   isActive: boolean;
-  onSectionChange?: (bounds: { min: THREE.Vector3; max: THREE.Vector3 }) => void;
   onDragStateChange?: (isDragging: boolean) => void;
 }
 
 export const SectionBox: React.FC<SectionBoxProps> = ({
-  targetObject,
   isActive,
-  onSectionChange,
   onDragStateChange,
 }) => {
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
@@ -25,79 +21,119 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   const { camera, gl, scene } = useThree();
   const raycaster = useRef(new THREE.Raycaster());
 
-  // Crear bounds iniciales cuando se activa y hay un objeto target
+  // Calcular bounds de todos los modelos cuando se activa
   useEffect(() => {
-    if (targetObject && isActive) {
-      const box = new THREE.Box3().setFromObject(targetObject);
-      
-      if (!box.isEmpty()) {
-        const size = box.getSize(new THREE.Vector3());
+    if (isActive) {
+      const globalBox = new THREE.Box3();
+      let hasObjects = false;
+
+      scene.traverse((child) => {
+        if (
+          (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
+          !child.userData.isSectionBox &&
+          !child.userData.isUI &&
+          !child.name.includes('helper') &&
+          !child.name.includes('grid')
+        ) {
+          // Para meshes, usar la geometría transformada
+          if (child instanceof THREE.Mesh) {
+            const box = new THREE.Box3().setFromObject(child);
+            if (!box.isEmpty()) {
+              globalBox.union(box);
+              hasObjects = true;
+            }
+          }
+          
+          // Para point clouds, usar la bounding box de la geometría
+          if (child instanceof THREE.Points && child.geometry.boundingBox) {
+            const box = child.geometry.boundingBox.clone();
+            box.applyMatrix4(child.matrixWorld);
+            if (!box.isEmpty()) {
+              globalBox.union(box);
+              hasObjects = true;
+            }
+          }
+        }
+      });
+
+      if (hasObjects && !globalBox.isEmpty()) {
+        // Expandir un poco para que se vea bien
+        const size = globalBox.getSize(new THREE.Vector3());
         const expansion = Math.max(size.x, size.y, size.z) * 0.1;
-        box.expandByScalar(expansion);
+        globalBox.expandByScalar(expansion);
         
         setBounds({
-          min: box.min.clone(),
-          max: box.max.clone(),
+          min: globalBox.min.clone(),
+          max: globalBox.max.clone(),
         });
       } else {
-        // Fallback para objetos sin geometría
-        const center = new THREE.Vector3();
-        targetObject.getWorldPosition(center);
+        // Fallback si no hay objetos
         setBounds({
-          min: new THREE.Vector3(center.x - 5, center.y - 5, center.z - 5),
-          max: new THREE.Vector3(center.x + 5, center.y + 5, center.z + 5),
+          min: new THREE.Vector3(-10, -10, -10),
+          max: new THREE.Vector3(10, 10, 10),
         });
       }
     }
-  }, [targetObject, isActive]);
+  }, [isActive, scene]);
 
   // Aplicar clipping planes
   const applyClipping = (newBounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
-    if (!targetObject) return;
-
-    // Crear los planos de clipping
+    // Crear los planos de clipping correctamente orientados
     const planes = [
-      new THREE.Plane(new THREE.Vector3(-1, 0, 0), newBounds.min.x),   // x >= min.x
-      new THREE.Plane(new THREE.Vector3(1, 0, 0), -newBounds.max.x),   // x <= max.x
-      new THREE.Plane(new THREE.Vector3(0, -1, 0), newBounds.min.y),   // y >= min.y
-      new THREE.Plane(new THREE.Vector3(0, 1, 0), -newBounds.max.y),   // y <= max.y
-      new THREE.Plane(new THREE.Vector3(0, 0, -1), newBounds.min.z),   // z >= min.z
-      new THREE.Plane(new THREE.Vector3(0, 0, 1), -newBounds.max.z),   // z <= max.z
+      new THREE.Plane(new THREE.Vector3(1, 0, 0), -newBounds.min.x),   // x >= min.x
+      new THREE.Plane(new THREE.Vector3(-1, 0, 0), newBounds.max.x),   // x <= max.x
+      new THREE.Plane(new THREE.Vector3(0, 1, 0), -newBounds.min.y),   // y >= min.y
+      new THREE.Plane(new THREE.Vector3(0, -1, 0), newBounds.max.y),   // y <= max.y
+      new THREE.Plane(new THREE.Vector3(0, 0, 1), -newBounds.min.z),   // z >= min.z
+      new THREE.Plane(new THREE.Vector3(0, 0, -1), newBounds.max.z),   // z <= max.z
     ];
 
-    // Aplicar a todos los objetos relevantes en la escena
+    // Aplicar a todos los objetos relevantes
     scene.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material && !child.userData.isSectionBox && !child.userData.isUI) {
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach((material) => {
-          material.clippingPlanes = planes;
-          material.clipShadows = true;
-          material.needsUpdate = true;
-        });
-      }
-      if (child instanceof THREE.Points && child.material && !child.userData.isSectionBox) {
-        child.material.clippingPlanes = planes;
-        child.material.clipShadows = true;
-        child.material.needsUpdate = true;
+      if (
+        (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
+        !child.userData.isSectionBox &&
+        !child.userData.isUI &&
+        !child.name.includes('helper') &&
+        !child.name.includes('grid')
+      ) {
+        if (child instanceof THREE.Mesh && child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach((material) => {
+            material.clippingPlanes = planes;
+            material.clipShadows = true;
+            material.needsUpdate = true;
+          });
+        }
+        
+        if (child instanceof THREE.Points && child.material) {
+          child.material.clippingPlanes = planes;
+          child.material.clipShadows = true;
+          child.material.needsUpdate = true;
+        }
       }
     });
-
-    onSectionChange?.(newBounds);
   };
 
   // Remover clipping planes
   const removeClipping = () => {
     scene.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material && !child.userData.isSectionBox) {
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach((material) => {
-          material.clippingPlanes = [];
-          material.needsUpdate = true;
-        });
-      }
-      if (child instanceof THREE.Points && child.material && !child.userData.isSectionBox) {
-        child.material.clippingPlanes = [];
-        child.material.needsUpdate = true;
+      if (
+        (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
+        !child.userData.isSectionBox
+      ) {
+        if (child instanceof THREE.Mesh && child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach((material) => {
+            material.clippingPlanes = [];
+            material.needsUpdate = true;
+          });
+        }
+        
+        if (child instanceof THREE.Points && child.material) {
+          child.material.clippingPlanes = [];
+          child.material.needsUpdate = true;
+        }
       }
     });
   };
@@ -137,7 +173,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     setDragHandle(handle);
     onDragStateChange?.(true);
     
-    // Guardar posición inicial del mouse en mundo
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((event.nativeEvent.clientX - rect.left) / rect.width) * 2 - 1,
@@ -146,7 +181,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
 
     raycaster.current.setFromCamera(mouse, camera);
     
-    // Crear un plano para el arrastre
     const center = bounds.min.clone().lerp(bounds.max, 0.5);
     let planeNormal = new THREE.Vector3();
     
@@ -157,7 +191,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
         break;
       case 'y-min':
       case 'y-max':
-        planeNormal.set(1, 0, 1);
+        planeNormal.set(1, 0, 0);
         break;
       case 'z-min':
       case 'z-max':
@@ -187,7 +221,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
 
     raycaster.current.setFromCamera(mouse, camera);
 
-    // Crear plano de arrastre basado en el handle
     const center = bounds.min.clone().lerp(bounds.max, 0.5);
     let planeNormal = new THREE.Vector3();
     
@@ -198,7 +231,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
         break;
       case 'y-min':
       case 'y-max':
-        planeNormal.set(1, 0, 1);
+        planeNormal.set(1, 0, 0);
         break;
       case 'z-min':
       case 'z-max':
@@ -265,7 +298,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   }, [isDragging, dragHandle, bounds, dragStart]);
 
-  if (!bounds || !isActive || !targetObject) {
+  if (!bounds || !isActive) {
     return null;
   }
 
