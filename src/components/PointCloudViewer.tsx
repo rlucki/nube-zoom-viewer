@@ -186,6 +186,7 @@ export const PointCloudViewer: React.FC = () => {
   /* -------------------- Selección de objetos (solo para Transform) --------- */
   const handleObjectSelection = useCallback(
     (object: THREE.Object3D | null) => {
+      console.log('Object selected:', object);
       setSelectedObject(object);
       if (object && transformActive) {
         toast({
@@ -200,7 +201,14 @@ export const PointCloudViewer: React.FC = () => {
   /* -------------------- Activación herramientas ---------------------------- */
   const handleSectionBoxToggle = useCallback(
     (active: boolean) => {
+      // Limpiar otras herramientas
+      if (active) {
+        setTransformActive(false);
+        setMeasurementActive(false);
+        setSelectedObject(null);
+      }
       setSectionBoxActive(active);
+      console.log('Section box toggled:', active);
       toast({
         title: active
           ? 'Herramienta de sección activada'
@@ -214,12 +222,16 @@ export const PointCloudViewer: React.FC = () => {
   );
 
   const handleTransformToggle = useCallback((active: boolean) => {
-    setTransformActive(active);
+    // Limpiar otras herramientas
     if (active) {
       setMeasurementActive(false);
       setSectionBoxActive(false);
       setSelectedObject(null);
+    } else {
+      setSelectedObject(null);
     }
+    setTransformActive(active);
+    console.log('Transform toggled:', active);
     toast({
       title: active ? 'Herramienta de transformación activada' : 'Herramienta de transformación desactivada',
       description: active ? 'Selecciona un objeto para moverlo o rotarlo' : 'Transformaciones deshabilitadas',
@@ -227,12 +239,13 @@ export const PointCloudViewer: React.FC = () => {
   }, [toast]);
 
   const handleMeasurementToggle = useCallback((active: boolean) => {
-    setMeasurementActive(active);
+    // Limpiar otras herramientas
     if (active) {
       setSectionBoxActive(false);
       setTransformActive(false);
       setSelectedObject(null);
     }
+    setMeasurementActive(active);
   }, []);
 
   /* -------------------------------------------------------------------------- */
@@ -414,3 +427,5 @@ export const PointCloudViewer: React.FC = () => {
     </div>
   );
 };
+
+export default PointCloudViewer;

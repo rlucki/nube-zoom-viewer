@@ -24,31 +24,53 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     const controls = controlsRef.current;
     if (!controls) return;
 
-    const handleDraggingChange = (event: any) => {
+    const handleDraggingChanged = (event: any) => {
+      console.log('Transform dragging changed:', event.value);
       onDraggingChange?.(event.value);
     };
 
-    controls.addEventListener('dragging-changed', handleDraggingChange);
+    const handleObjectChange = () => {
+      console.log('Transform object changed');
+    };
+
+    controls.addEventListener('dragging-changed', handleDraggingChanged);
+    controls.addEventListener('objectChange', handleObjectChange);
     
     return () => {
-      controls.removeEventListener('dragging-changed', handleDraggingChange);
+      controls.removeEventListener('dragging-changed', handleDraggingChanged);
+      controls.removeEventListener('objectChange', handleObjectChange);
     };
   }, [onDraggingChange]);
 
-  // Asegurar que el objeto esté correctamente vinculado
+  // Vincular objeto correctamente
   useEffect(() => {
     const controls = controlsRef.current;
-    if (controls && object) {
-      controls.attach(object);
+    if (controls && object && isActive) {
+      console.log('Attaching object to transform controls:', object);
+      try {
+        controls.attach(object);
+      } catch (error) {
+        console.error('Error attaching object:', error);
+      }
+    } else if (controls) {
+      controls.detach();
     }
-  }, [object]);
+  }, [object, isActive]);
 
-  if (!object || !isActive) return null;
+  // Configurar controles cuando se active/desactive
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (controls) {
+      controls.enabled = isActive && !!object;
+      controls.visible = isActive && !!object;
+    }
+  }, [isActive, object]);
+
+  if (!isActive || !object) return null;
 
   return (
     <TransformControls
       ref={controlsRef}
-      object={object}
       mode={mode}
       camera={camera}
       domElement={gl.domElement}
@@ -57,6 +79,9 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       showY={true}
       showZ={true}
       space="world"
+      translationSnap={0.1}
+      rotationSnap={THREE.MathUtils.degToRad(15)}
+      scaleSnap={0.1}
     />
   );
 };
