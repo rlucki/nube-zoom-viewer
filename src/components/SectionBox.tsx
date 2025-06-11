@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
@@ -133,8 +132,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
   const handlePointerMove = React.useCallback((e: PointerEvent) => {
     if (!isDragging || !dragHandle || !dragAxis || !bounds) return;
     
-    console.log('Moving with handle:', dragHandle, 'axis:', dragAxis);
-    
     setBounds((prevBounds) => {
       if (!prevBounds) return prevBounds;
       
@@ -159,7 +156,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
         newBounds.max[dragAxis] = Math.max(newBounds.max[dragAxis] + delta, newBounds.min[dragAxis] + minSize);
       }
       
-      console.log('New bounds:', newBounds);
       return newBounds;
     });
     
@@ -168,7 +164,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
 
   /* pointer up - función fija que no cambia entre renders */
   const handlePointerUp = React.useCallback(() => {
-    console.log('Pointer up, ending drag');
     setIsDragging(false);
     setDragHandle(null);
     setDragAxis(null);
@@ -179,14 +174,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
   /* listeners - ahora con dependencias correctas */
   useEffect(() => {
     if (isDragging) {
-      console.log('Adding event listeners');
       const canvas = gl.domElement;
       canvas.addEventListener('pointermove', handlePointerMove);
       canvas.addEventListener('pointerup', handlePointerUp);
       canvas.addEventListener('pointercancel', handlePointerUp);
       
       return () => {
-        console.log('Removing event listeners');
         canvas.removeEventListener('pointermove', handlePointerMove);
         canvas.removeEventListener('pointerup', handlePointerUp);
         canvas.removeEventListener('pointercancel', handlePointerUp);
@@ -237,4 +230,3 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     </group>
   );
 };
-
