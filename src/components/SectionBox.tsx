@@ -128,51 +128,49 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     gl.domElement.style.cursor = 'grabbing';
   };
 
-  /* pointer move - función fija que no cambia entre renders */
-  const handlePointerMove = React.useCallback((e: PointerEvent) => {
-    if (!isDragging || !dragHandle || !dragAxis || !bounds) return;
-    
-    setBounds((prevBounds) => {
-      if (!prevBounds) return prevBounds;
+  /* pointer move - simplificado sin useCallback para evitar problemas de dependencias */
+  useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!isDragging || !dragHandle || !dragAxis || !bounds) return;
       
       const rect = gl.domElement.getBoundingClientRect();
-      const center = prevBounds.min.clone().lerp(prevBounds.max, 0.5);
+      const center = bounds.min.clone().lerp(bounds.max, 0.5);
       const dist = camera.position.distanceTo(center);
       const wpp = (2 * Math.tan(THREE.MathUtils.degToRad((camera as THREE.PerspectiveCamera).fov) / 2) * dist) / rect.height;
       
       let deltaPx = dragAxis === 'x' ? e.movementX : dragAxis === 'y' ? -e.movementY : e.movementY;
-      if (deltaPx === 0) return prevBounds;
+      if (deltaPx === 0) return;
       
       let delta = deltaPx * wpp * (e.shiftKey ? 0.1 : 1);
       delta = Math.round(delta / 0.05) * 0.05;
-      if (delta === 0) return prevBounds;
+      if (delta === 0) return;
       
-      const newBounds = { min: prevBounds.min.clone(), max: prevBounds.max.clone() };
-      const minSize = 0.1;
+      setBounds(prevBounds => {
+        if (!prevBounds) return prevBounds;
+        
+        const newBounds = { min: prevBounds.min.clone(), max: prevBounds.max.clone() };
+        const minSize = 0.1;
+        
+        if (dragHandle.endsWith('min')) {
+          newBounds.min[dragAxis] = Math.min(newBounds.min[dragAxis] + delta, newBounds.max[dragAxis] - minSize);
+        } else {
+          newBounds.max[dragAxis] = Math.max(newBounds.max[dragAxis] + delta, newBounds.min[dragAxis] + minSize);
+        }
+        
+        return newBounds;
+      });
       
-      if (dragHandle.endsWith('min')) {
-        newBounds.min[dragAxis] = Math.min(newBounds.min[dragAxis] + delta, newBounds.max[dragAxis] - minSize);
-      } else {
-        newBounds.max[dragAxis] = Math.max(newBounds.max[dragAxis] + delta, newBounds.min[dragAxis] + minSize);
-      }
-      
-      return newBounds;
-    });
-    
-    setUserModified(true);
-  }, [isDragging, dragHandle, dragAxis, bounds, camera, gl]);
+      setUserModified(true);
+    };
 
-  /* pointer up - función fija que no cambia entre renders */
-  const handlePointerUp = React.useCallback(() => {
-    setIsDragging(false);
-    setDragHandle(null);
-    setDragAxis(null);
-    onDragStateChange?.(false);
-    gl.domElement.style.cursor = 'default';
-  }, [gl, onDragStateChange]);
+    const handlePointerUp = () => {
+      setIsDragging(false);
+      setDragHandle(null);
+      setDragAxis(null);
+      onDragStateChange?.(false);
+      gl.domElement.style.cursor = 'default';
+    };
 
-  /* listeners - ahora con dependencias correctas */
-  useEffect(() => {
     if (isDragging) {
       const canvas = gl.domElement;
       canvas.addEventListener('pointermove', handlePointerMove);
@@ -185,7 +183,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
         canvas.removeEventListener('pointercancel', handlePointerUp);
       };
     }
-  }, [isDragging, handlePointerMove, handlePointerUp, gl]);
+  }, [isDragging, dragHandle, dragAxis, bounds, camera, gl, onDragStateChange]);
 
   /* render */
   if (!bounds || !isActive) return null;

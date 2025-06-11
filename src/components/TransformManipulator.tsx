@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 import { TransformControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
@@ -22,14 +23,25 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
-    const callback = (e: { value: boolean }) => {
-      onDraggingChange?.(e.value);
+
+    const handleDraggingChange = (event: any) => {
+      onDraggingChange?.(event.value);
     };
-    controls.addEventListener('dragging-changed', callback);
+
+    controls.addEventListener('dragging-changed', handleDraggingChange);
+    
     return () => {
-      controls.removeEventListener('dragging-changed', callback);
+      controls.removeEventListener('dragging-changed', handleDraggingChange);
     };
   }, [onDraggingChange]);
+
+  // Asegurar que el objeto esté correctamente vinculado
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (controls && object) {
+      controls.attach(object);
+    }
+  }, [object]);
 
   if (!object || !isActive) return null;
 
@@ -40,6 +52,11 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       mode={mode}
       camera={camera}
       domElement={gl.domElement}
+      size={1}
+      showX={true}
+      showY={true}
+      showZ={true}
+      space="world"
     />
   );
 };
