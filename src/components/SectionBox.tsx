@@ -123,11 +123,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
   const handlePointerDown = (e: ThreeEvent<PointerEvent>, handle: string) => {
     if (!bounds) return;
     e.stopPropagation();
-    
+
     setIsDragging(true);
     setDragHandle(handle);
     setDragAxis(handle.charAt(0) as 'x' | 'y' | 'z');
     setInitialMousePos({ x: e.clientX, y: e.clientY });
+    setUserModified(true);
     onDragStateChange?.(true);
     gl.domElement.style.cursor = 'grabbing';
     
