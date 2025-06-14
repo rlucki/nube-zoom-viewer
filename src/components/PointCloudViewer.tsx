@@ -85,6 +85,19 @@ export const PointCloudViewer: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [toolStateReset, setToolStateReset] = useState(0); // Para forzar reset
 
+  /* -------------------- Drag state management ----------------------------- */
+  const { dragState, startDrag, endDrag, cancelDrag } = useDragState();
+
+  const handleDragStart = useCallback((type: 'transform' | 'section' | 'measurement', target?: string) => {
+    console.log(`Starting drag: ${type}${target ? ` - ${target}` : ''}`);
+    startDrag(type, target);
+  }, [startDrag]);
+
+  const handleDragEnd = useCallback(() => {
+    console.log('Ending drag');
+    endDrag();
+  }, [endDrag]);
+
   /* -------------------- Mensaje de bienvenida ------------------------------ */
   useEffect(() => {
     toast({
@@ -202,8 +215,6 @@ export const PointCloudViewer: React.FC = () => {
   );
 
   /* -------------------- Activación herramientas mejorada ------------------ */
-  const { dragState, startDrag, endDrag, cancelDrag } = useDragState();
-
   const handleSectionBoxToggle = useCallback((active: boolean) => {
     console.log('Section Box toggle:', active);
     
@@ -225,7 +236,7 @@ export const PointCloudViewer: React.FC = () => {
         ? 'Arrastra los controles de colores para seccionar el modelo'
         : 'Sección desactivada',
     });
-  }, [toast, cancelDrag]);
+  }, [toast]);
 
   const handleTransformToggle = useCallback((active: boolean) => {
     console.log('Transform toggle:', active);
