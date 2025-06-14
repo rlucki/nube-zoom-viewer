@@ -329,12 +329,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       
       {/* Handles de control */}
       {[
-        { handle: 'x-min', position: [bounds.min.x, center.y, center.z], color: '#ff4444' },
-        { handle: 'x-max', position: [bounds.max.x, center.y, center.z], color: '#ff4444' },
-        { handle: 'y-min', position: [center.x, bounds.min.y, center.z], color: '#44ff44' },
-        { handle: 'y-max', position: [center.x, bounds.max.y, center.z], color: '#44ff44' },
-        { handle: 'z-min', position: [center.x, center.y, bounds.min.z], color: '#4444ff' },
-        { handle: 'z-max', position: [center.x, center.y, bounds.max.z], color: '#4444ff' },
+        { handle: 'x-min', position: [bounds.min.x, center.y, center.z] as [number, number, number], color: '#ff4444' },
+        { handle: 'x-max', position: [bounds.max.x, center.y, center.z] as [number, number, number], color: '#ff4444' },
+        { handle: 'y-min', position: [center.x, bounds.min.y, center.z] as [number, number, number], color: '#44ff44' },
+        { handle: 'y-max', position: [center.x, bounds.max.y, center.z] as [number, number, number], color: '#44ff44' },
+        { handle: 'z-min', position: [center.x, center.y, bounds.min.z] as [number, number, number], color: '#4444ff' },
+        { handle: 'z-max', position: [center.x, center.y, bounds.max.z] as [number, number, number], color: '#4444ff' },
       ].map((h) => (
         <Handle key={h.handle} {...h} />
       ))}
