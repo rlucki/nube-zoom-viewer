@@ -370,6 +370,8 @@ export const PointCloudViewer: React.FC = () => {
             isActive={sectionBoxActive}
             bounds={sectionBoxBounds}
             setBounds={setSectionBoxBounds}
+            dragSensitivity={dragSensitivity}
+            onDragSensitivityChange={setDragSensitivity}
           />
 
           {/* Manipulador de transformación */}
@@ -445,7 +447,24 @@ export const PointCloudViewer: React.FC = () => {
         onToggleVisibility={() => setControlsVisible(!controlsVisible)}
         isPointCloud={sampledPoints.length > 0}
         hasIFCModel={ifcModels.length > 0}
-      />
+      >
+        {/* Control de sensibilidad para SectionBox */}
+        <div className="pt-2">
+          <label className="text-xs text-gray-400">Sensibilidad sección</label>
+          <input
+            type="range"
+            min={0.0004}
+            max={0.007}
+            step={0.0001}
+            value={dragSensitivity}
+            onChange={e => setDragSensitivity(Number(e.target.value))}
+            className="w-full accent-cyan-500"
+          />
+          <div className="text-xs text-gray-400">
+            Sensibilidad: {(dragSensitivity*1000).toFixed(2)}
+          </div>
+        </div>
+      </ViewerControls>
 
       {/* ---------- Overlay de carga --------------------------------------- */}
       {isLoading && (

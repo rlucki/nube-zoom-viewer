@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
+import { useHandleSize } from '../hooks/useHandleSize';
 
 interface SectionBoxProps {
   isActive: boolean;
@@ -9,6 +10,8 @@ interface SectionBoxProps {
     b: { min: THREE.Vector3; max: THREE.Vector3 } | null
   ) => void;
   onDragStateChange?: (isDragging: boolean, target?: string) => void;
+  dragSensitivity: number;
+  onDragSensitivityChange?: (value: number) => void;
 }
 
 export const SectionBox: React.FC<SectionBoxProps> = ({
@@ -16,6 +19,8 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   bounds,
   setBounds,
   onDragStateChange,
+  dragSensitivity,
+  onDragSensitivityChange,
 }) => {
   const [isDragging, setIsDragging] = React.useState(false);
   const dragStateRef = useRef<{
@@ -182,7 +187,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     console.log('Section Box drag started:', handle, 'initial value:', currentValue);
   }, [bounds, isDragging, gl, onDragStateChange]);
 
-  // Movimiento durante el arrastre - sensibilidad ajustada para suavidad intermedia
+  // Movimiento durante el arrastre, usando sensibilidad proveniente de la UI
   const handleGlobalPointerMove = useCallback((e: PointerEvent) => {
     if (!dragStateRef.current.active || !bounds || !dragStateRef.current.startMouse) {
       return;
@@ -194,9 +199,9 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     const deltaX = e.clientX - dragStateRef.current.startMouse.x;
     const deltaY = e.clientY - dragStateRef.current.startMouse.y;
 
-    // Sensibilidad más suave e intermedia
     const cameraDistance = camera.position.length();
-    const sensitivity = Math.max(cameraDistance * 0.0012, 0.0035);
+    // Sensibilidad controlada por UI (dragSensitivity), a escalar por distancia
+    const sensitivity = Math.max(cameraDistance * dragSensitivity, 0.001);
 
     let movement = 0;
     switch (dragStateRef.current.axis) {
@@ -226,7 +231,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
 
     setBounds(newBounds);
-  }, [bounds, camera]);
+  }, [bounds, camera, dragSensitivity]);
 
   // Fin del arrastre - mejorado
   const handleGlobalPointerUp = useCallback((e: PointerEvent) => {
@@ -266,6 +271,36 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   const center = bounds.min.clone().lerp(bounds.max, 0.5);
   const size = bounds.max.clone().sub(bounds.min);
 
+  // Helper para renderizar handle con tamaño adaptativo
+  const Handle = ({
+    handle,
+    position,
+    color,
+  }: { handle: string, position: [number, number, number], color: string }) => {
+    const vec = new THREE.Vector3(...position);
+    const scale = useHandleSize(vec, 26); // 26px "base"
+
+    return (
+      <mesh
+        key={handle}
+        position={position}
+        scale={scale}
+        userData={{ isSectionBox: true }}
+        onPointerDown={(e) => handlePointerDown(e, handle)}
+        onPointerEnter={() => !isDragging && (gl.domElement.style.cursor = 'grab')}
+        onPointerLeave={() => !isDragging && (gl.domElement.style.cursor = 'default')}
+      >
+        <sphereGeometry args={[0.6, 16, 16]} />
+        <meshBasicMaterial 
+          color={color} 
+          transparent 
+          opacity={dragStateRef.current.handle === handle ? 1.0 : 0.8} 
+          depthTest={false} 
+        />
+      </mesh>
+    );
+  };
+
   return (
     <group ref={boxRef}>
       {/* Wireframe del cubo */}
@@ -300,24 +335,18 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
         { handle: 'y-max', position: [center.x, bounds.max.y, center.z], color: '#44ff44' },
         { handle: 'z-min', position: [center.x, center.y, bounds.min.z], color: '#4444ff' },
         { handle: 'z-max', position: [center.x, center.y, bounds.max.z], color: '#4444ff' },
-      ].map(({ handle, position, color }) => (
-        <mesh
-          key={handle}
-          position={position as [number, number, number]}
-          userData={{ isSectionBox: true }}
-          onPointerDown={(e) => handlePointerDown(e, handle)}
-          onPointerEnter={() => !isDragging && (gl.domElement.style.cursor = 'grab')}
-          onPointerLeave={() => !isDragging && (gl.domElement.style.cursor = 'default')}
-        >
-          <sphereGeometry args={[0.6, 16, 16]} />
-          <meshBasicMaterial 
-            color={color} 
-            transparent 
-            opacity={dragStateRef.current.handle === handle ? 1.0 : 0.8} 
-            depthTest={false} 
-          />
-        </mesh>
+      ].map((h) => (
+        <Handle key={h.handle} {...h} />
       ))}
+
+      {/* Slider UI para sensibilidad */}
+      {onDragSensitivityChange && (
+        <group position={[center.x, bounds.max.y + 2.8 * size.y, center.z]}>
+          {/* Renderizamos un simple plano flotante (abajo iría UI real, aquí placeholder) */}
+          {/* Puedes reemplazar esto con UI Canvas o ControlPanel en Viewer */}
+          {/* Si la UI está fuera del 3D, ignora esto */}
+        </group>
+      )}
     </group>
   );
 };
