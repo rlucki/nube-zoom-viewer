@@ -28,6 +28,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         (child instanceof THREE.Mesh || child instanceof THREE.Points) &&
         !child.userData.isSectionBox &&
         !child.userData.isUI &&
+        !child.userData.isTransformControl &&
         !child.name.includes('helper') &&
         !child.name.includes('grid')
       ) {
