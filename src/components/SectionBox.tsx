@@ -1,15 +1,23 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 
 interface SectionBoxProps {
   isActive: boolean;
+  bounds: { min: THREE.Vector3; max: THREE.Vector3 } | null;
+  setBounds: (
+    b: { min: THREE.Vector3; max: THREE.Vector3 } | null
+  ) => void;
   onDragStateChange?: (isDragging: boolean, target?: string) => void;
 }
 
-export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateChange }) => {
-  const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+export const SectionBox: React.FC<SectionBoxProps> = ({
+  isActive,
+  bounds,
+  setBounds,
+  onDragStateChange,
+}) => {
+  const [isDragging, setIsDragging] = React.useState(false);
   const dragStateRef = useRef<{
     handle: string | null;
     axis: 'x' | 'y' | 'z' | null;
@@ -27,7 +35,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
   const boxRef = useRef<THREE.Group>(null);
   const { camera, gl, scene } = useThree();
 
-  // Calcular bounds iniciales
+  // Calcular bounds iniciales SOLO si no existen y SectionBox activo
   useEffect(() => {
     if (isActive && !bounds) {
       const globalBox = new THREE.Box3();
@@ -68,9 +76,9 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
         setBounds({ min: new THREE.Vector3(-10, -10, -10), max: new THREE.Vector3(10, 10, 10) });
       }
     }
-  }, [isActive, scene, bounds]);
+  }, [isActive, bounds, setBounds, scene]);
 
-  // Aplicar clipping planes
+  // Aplicar clipping igual que antes, pero solo si bounds existe
   const applyClipping = useCallback((newBounds: { min: THREE.Vector3; max: THREE.Vector3 }) => {
     const planes = [
       new THREE.Plane(new THREE.Vector3(1, 0, 0), -newBounds.min.x),
@@ -118,18 +126,17 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [isActive, bounds, applyClipping, removeClipping]);
 
-  // Limpiar al desactivar
+  // Limpiar solo al desmontar: ya NO reiniciamos bounds por desactivar tools.
   useEffect(() => {
     if (!isActive) {
       removeClipping();
-      setBounds(null);
       setIsDragging(false);
       dragStateRef.current = {
         handle: null,
         axis: null,
         startValue: 0,
         startMouse: null,
-        active: false
+        active: false,
       };
     }
   }, [isActive, removeClipping]);

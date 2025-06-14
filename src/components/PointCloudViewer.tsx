@@ -84,6 +84,10 @@ export const PointCloudViewer: React.FC = () => {
   >([]);
   const [isDragging, setIsDragging] = useState(false);
   const [toolStateReset, setToolStateReset] = useState(0); // Para forzar reset
+  const [sectionBoxBounds, setSectionBoxBounds] = useState<{
+    min: THREE.Vector3;
+    max: THREE.Vector3;
+  } | null>(null);
 
   /* -------------------- Mensaje de bienvenida ------------------------------ */
   useEffect(() => {
@@ -154,6 +158,7 @@ export const PointCloudViewer: React.FC = () => {
     setMeasurementActive(false);
     setSectionBoxActive(false);
     setTransformActive(false);
+    setSectionBoxBounds(null); // Solo aquí se limpia la caja de sección
     toast({
       title: 'Datos limpiados',
       description: 'Todos los archivos han sido eliminados',
@@ -363,6 +368,8 @@ export const PointCloudViewer: React.FC = () => {
           {/* Caja de sección - con manejo centralizado de drag */}
           <SectionBox
             isActive={sectionBoxActive}
+            bounds={sectionBoxBounds}
+            setBounds={setSectionBoxBounds}
             onDragStateChange={(isDragging, target) => {
               if (isDragging) {
                 handleDragStart('section', target);
