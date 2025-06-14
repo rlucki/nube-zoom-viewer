@@ -340,13 +340,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       ))}
 
       {/* Slider UI para sensibilidad */}
+      {/* Si lo necesitas dentro del canvas, activa esto...
       {onDragSensitivityChange && (
         <group position={[center.x, bounds.max.y + 2.8 * size.y, center.z]}>
-          {/* Renderizamos un simple plano flotante (abajo iría UI real, aquí placeholder) */}
-          {/* Puedes reemplazar esto con UI Canvas o ControlPanel en Viewer */}
-          {/* Si la UI está fuera del 3D, ignora esto */}
         </group>
       )}
+      */}
     </group>
   );
 };
