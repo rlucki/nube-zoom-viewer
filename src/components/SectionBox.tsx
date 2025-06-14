@@ -180,7 +180,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     
     // Factor de sensibilidad mejorado
     const cameraDistance = camera.position.length();
-    const sensitivity = cameraDistance * 0.002;
+    const sensitivity = cameraDistance * 0.001; // reduce sensitivity
     
     let movement = 0;
     switch (dragStateRef.current.axis) {

@@ -310,7 +310,7 @@ export const PointCloudViewer: React.FC = () => {
           {/* Selector de objetos (solo para Transformación) */}
           <ObjectSelector
             isActive={transformActive}
-            isDragging={isDragging}
+            isDragging={isDragging || isTransformDragging}
             onObjectHover={() => {}}
             onObjectSelect={handleObjectSelection}
           />
@@ -347,7 +347,13 @@ export const PointCloudViewer: React.FC = () => {
             zoomSpeed={0.6}
             panSpeed={0.8}
             rotateSpeed={0.4}
-            enabled={!isTransformDragging && !isDragging}
+            enabled={
+              !transformActive &&
+              !sectionBoxActive &&
+              !measurementActive &&
+              !isTransformDragging &&
+              !isDragging
+            }
           />
 
           {/* Stats */}
