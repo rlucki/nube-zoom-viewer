@@ -365,32 +365,18 @@ export const PointCloudViewer: React.FC = () => {
             onSnapModeChange={setSnapMode}
           />
 
-          {/* Caja de sección - con manejo centralizado de drag */}
+          {/* Caja de sección */}
           <SectionBox
             isActive={sectionBoxActive}
             bounds={sectionBoxBounds}
             setBounds={setSectionBoxBounds}
-            onDragStateChange={(isDragging, target) => {
-              if (isDragging) {
-                handleDragStart('section', target);
-              } else {
-                handleDragEnd();
-              }
-            }}
           />
 
-          {/* Manipulador de transformación - con manejo centralizado de drag */}
+          {/* Manipulador de transformación */}
           <TransformManipulator
             object={selectedObject}
             isActive={transformActive}
             mode={transformMode}
-            onDraggingChange={(isDragging) => {
-              if (isDragging) {
-                handleDragStart('transform');
-              } else {
-                handleDragEnd();
-              }
-            }}
           />
 
           {/* Controles de cámara - mejorados para evitar conflictos */}
