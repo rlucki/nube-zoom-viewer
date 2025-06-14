@@ -81,6 +81,7 @@ export const PointCloudViewer: React.FC = () => {
     Array<{ distance: number; points: [THREE.Vector3, THREE.Vector3] }>
   >([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [toolStateReset, setToolStateReset] = useState(0); // Para forzar reset
 
   /* -------------------- Mensaje de bienvenida ------------------------------ */
   useEffect(() => {
@@ -183,45 +184,51 @@ export const PointCloudViewer: React.FC = () => {
     });
   }, [toast]);
 
-  /* -------------------- Selección de objetos (solo para Transform) --------- */
+  /* -------------------- Selección de objetos mejorada --------------------- */
   const handleObjectSelection = useCallback(
     (object: THREE.Object3D | null) => {
-      console.log('Object selected:', object);
+      console.log('Object selected for transform:', object?.name || object?.type || 'null');
       setSelectedObject(object);
       if (object && transformActive) {
         toast({
-          title: 'Objeto seleccionado para transformar',
-          description: 'Usa los ejes de colores para mover o rotar',
+          title: 'Objeto seleccionado',
+          description: `${object.name || object.type} listo para transformar`,
         });
       }
     },
     [transformActive, toast],
   );
 
-  /* -------------------- Activación herramientas ---------------------------- */
+  /* -------------------- Activación herramientas mejorada ------------------ */
   const handleSectionBoxToggle = useCallback(
     (active: boolean) => {
+      console.log('Section Box toggle:', active);
+      
       // Limpiar otras herramientas
       if (active) {
         setTransformActive(false);
         setMeasurementActive(false);
         setSelectedObject(null);
       }
+      
       setSectionBoxActive(active);
-      console.log('Section box toggled:', active);
+      setToolStateReset(prev => prev + 1); // Forzar reset de estado
+      
       toast({
         title: active
           ? 'Herramienta de sección activada'
           : 'Herramienta de sección desactivada',
         description: active
-          ? 'La caja de sección abarca todos los modelos. Arrastra los controles para seccionar.'
-          : 'Planos de corte eliminados',
+          ? 'Arrastra los controles de colores para seccionar el modelo'
+          : 'Sección desactivada',
       });
     },
     [toast],
   );
 
   const handleTransformToggle = useCallback((active: boolean) => {
+    console.log('Transform toggle:', active);
+    
     // Limpiar otras herramientas
     if (active) {
       setMeasurementActive(false);
@@ -230,22 +237,28 @@ export const PointCloudViewer: React.FC = () => {
     } else {
       setSelectedObject(null);
     }
+    
     setTransformActive(active);
-    console.log('Transform toggled:', active);
+    setToolStateReset(prev => prev + 1); // Forzar reset de estado
+    
     toast({
       title: active ? 'Herramienta de transformación activada' : 'Herramienta de transformación desactivada',
-      description: active ? 'Selecciona un objeto para moverlo o rotarlo' : 'Transformaciones deshabilitadas',
+      description: active ? 'Selecciona un objeto haciendo clic sobre él' : 'Transformaciones deshabilitadas',
     });
   }, [toast]);
 
   const handleMeasurementToggle = useCallback((active: boolean) => {
+    console.log('Measurement toggle:', active);
+    
     // Limpiar otras herramientas
     if (active) {
       setSectionBoxActive(false);
       setTransformActive(false);
       setSelectedObject(null);
     }
+    
     setMeasurementActive(active);
+    setToolStateReset(prev => prev + 1); // Forzar reset de estado
   }, []);
 
   /* -------------------------------------------------------------------------- */
@@ -405,6 +418,7 @@ export const PointCloudViewer: React.FC = () => {
 
       {/* ---------- Canvas (Three.js) -------------------------------------- */}
       <Canvas
+        key={toolStateReset} // Forzar re-render cuando cambian herramientas
         camera={{ position: [50, 50, 50], fov: 60, near: 0.01, far: 100000 }}
         className="absolute inset-0"
         gl={{ 
