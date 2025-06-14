@@ -11,24 +11,24 @@ interface SectionBoxProps {
 export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateChange }) => {
   const [bounds, setBounds] = useState<{ min: THREE.Vector3; max: THREE.Vector3 } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragState, setDragState] = useState<{
+  const dragStateRef = useRef<{
     handle: string | null;
     axis: 'x' | 'y' | 'z' | null;
-    startMouse: { x: number; y: number } | null;
     startValue: number;
-    camera: THREE.Camera | null;
+    startMouse: THREE.Vector2 | null;
+    active: boolean;
   }>({
     handle: null,
     axis: null,
-    startMouse: null,
     startValue: 0,
-    camera: null
+    startMouse: null,
+    active: false
   });
 
   const boxRef = useRef<THREE.Group>(null);
   const { camera, gl, scene } = useThree();
 
-  // Calcular bounds iniciales solo cuando se activa por primera vez
+  // Calcular bounds iniciales
   useEffect(() => {
     if (isActive && !bounds) {
       const globalBox = new THREE.Box3();
@@ -110,7 +110,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     });
   }, [scene]);
 
-  // Aplicar/remover clipping cuando cambian los bounds o la activación
+  // Aplicar/remover clipping
   useEffect(() => {
     if (isActive && bounds) {
       applyClipping(bounds);
@@ -125,13 +125,13 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
       removeClipping();
       setBounds(null);
       setIsDragging(false);
-      setDragState({
+      dragStateRef.current = {
         handle: null,
         axis: null,
-        startMouse: null,
         startValue: 0,
-        camera: null
-      });
+        startMouse: null,
+        active: false
+      };
     }
   }, [isActive, removeClipping]);
 
@@ -144,33 +144,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [bounds]);
 
-  // Calcular movimiento 3D desde coordenadas 2D del mouse
-  const calculateMovement = useCallback((
-    mouseX: number, 
-    mouseY: number, 
-    startMouseX: number, 
-    startMouseY: number, 
-    axis: 'x' | 'y' | 'z'
-  ): number => {
-    const deltaX = mouseX - startMouseX;
-    const deltaY = mouseY - startMouseY;
-    
-    // Factor de sensibilidad basado en la distancia de la cámara
-    const cameraDistance = camera.position.length();
-    const sensitivity = cameraDistance * 0.003;
-    
-    switch (axis) {
-      case 'x':
-        return deltaX * sensitivity;
-      case 'y':
-        return -deltaY * sensitivity; // Invertido para Y
-      case 'z':
-        return deltaY * sensitivity;
-      default:
-        return 0;
-    }
-  }, [camera]);
-
   // Inicio del arrastre
   const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>, handle: string) => {
     if (!bounds) return;
@@ -181,34 +154,46 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     const isMin = handle.endsWith('min');
     const currentValue = isMin ? bounds.min[axis] : bounds.max[axis];
     
-    setIsDragging(true);
-    setDragState({
+    dragStateRef.current = {
       handle,
       axis,
-      startMouse: { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY },
       startValue: currentValue,
-      camera: camera
-    });
+      startMouse: new THREE.Vector2(e.nativeEvent.clientX, e.nativeEvent.clientY),
+      active: true
+    };
     
+    setIsDragging(true);
     onDragStateChange?.(true);
     gl.domElement.style.cursor = 'grabbing';
     
     console.log('Section Box drag started:', handle, 'initial value:', currentValue);
-  }, [bounds, camera, gl, onDragStateChange]);
+  }, [bounds, gl, onDragStateChange]);
 
-  // Movimiento durante el arrastre
+  // Movimiento durante el arrastre - usando useCallback con dependencias específicas
   const handleGlobalPointerMove = useCallback((e: PointerEvent) => {
-    if (!isDragging || !dragState.handle || !dragState.axis || !bounds || !dragState.startMouse) {
+    if (!dragStateRef.current.active || !bounds || !dragStateRef.current.startMouse) {
       return;
     }
 
-    const movement = calculateMovement(
-      e.clientX,
-      e.clientY,
-      dragState.startMouse.x,
-      dragState.startMouse.y,
-      dragState.axis
-    );
+    const deltaX = e.clientX - dragStateRef.current.startMouse.x;
+    const deltaY = e.clientY - dragStateRef.current.startMouse.y;
+    
+    // Factor de sensibilidad mejorado
+    const cameraDistance = camera.position.length();
+    const sensitivity = cameraDistance * 0.002;
+    
+    let movement = 0;
+    switch (dragStateRef.current.axis) {
+      case 'x':
+        movement = deltaX * sensitivity;
+        break;
+      case 'y':
+        movement = -deltaY * sensitivity;
+        break;
+      case 'z':
+        movement = deltaY * sensitivity;
+        break;
+    }
 
     // Aplicar modo fino con Shift
     const finalMovement = e.shiftKey ? movement * 0.1 : movement;
@@ -216,46 +201,42 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     const newBounds = { min: bounds.min.clone(), max: bounds.max.clone() };
     const minSize = 0.5;
     
-    if (dragState.handle.endsWith('min')) {
-      const newValue = dragState.startValue + finalMovement;
-      newBounds.min[dragState.axis] = Math.min(newValue, newBounds.max[dragState.axis] - minSize);
+    if (dragStateRef.current.handle?.endsWith('min')) {
+      const newValue = dragStateRef.current.startValue + finalMovement;
+      newBounds.min[dragStateRef.current.axis!] = Math.min(newValue, newBounds.max[dragStateRef.current.axis!] - minSize);
     } else {
-      const newValue = dragState.startValue + finalMovement;
-      newBounds.max[dragState.axis] = Math.max(newValue, newBounds.min[dragState.axis] + minSize);
+      const newValue = dragStateRef.current.startValue + finalMovement;
+      newBounds.max[dragStateRef.current.axis!] = Math.max(newValue, newBounds.min[dragStateRef.current.axis!] + minSize);
     }
     
     setBounds(newBounds);
-  }, [isDragging, dragState, bounds, calculateMovement]);
+  }, [bounds, camera]);
 
-  // Fin del arrastre
+  // Fin del arrastre - usando useCallback
   const handleGlobalPointerUp = useCallback(() => {
-    if (isDragging) {
-      console.log('Section Box drag ended - bounds maintained');
+    if (dragStateRef.current.active) {
+      console.log('Section Box drag ended - position maintained');
+      dragStateRef.current.active = false;
       setIsDragging(false);
-      setDragState({
-        handle: null,
-        axis: null,
-        startMouse: null,
-        startValue: 0,
-        camera: null
-      });
       onDragStateChange?.(false);
       gl.domElement.style.cursor = 'default';
     }
-  }, [isDragging, onDragStateChange, gl]);
+  }, [onDragStateChange, gl]);
 
-  // Event listeners globales para el arrastre
+  // Event listeners globales - con cleanup adecuado
   useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('pointermove', handleGlobalPointerMove);
-      document.addEventListener('pointerup', handleGlobalPointerUp);
-      document.addEventListener('pointercancel', handleGlobalPointerUp);
-      
-      return () => {
+    if (isDragging && dragStateRef.current.active) {
+      const cleanup = () => {
         document.removeEventListener('pointermove', handleGlobalPointerMove);
         document.removeEventListener('pointerup', handleGlobalPointerUp);
         document.removeEventListener('pointercancel', handleGlobalPointerUp);
       };
+
+      document.addEventListener('pointermove', handleGlobalPointerMove, { passive: false });
+      document.addEventListener('pointerup', handleGlobalPointerUp);
+      document.addEventListener('pointercancel', handleGlobalPointerUp);
+      
+      return cleanup;
     }
   }, [isDragging, handleGlobalPointerMove, handleGlobalPointerUp]);
 
@@ -290,7 +271,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
         />
       </mesh>
       
-      {/* Handles de control más grandes y visibles */}
+      {/* Handles de control */}
       {[
         { handle: 'x-min', position: [bounds.min.x, center.y, center.z], color: '#ff4444' },
         { handle: 'x-max', position: [bounds.max.x, center.y, center.z], color: '#ff4444' },
@@ -311,7 +292,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
           <meshBasicMaterial 
             color={color} 
             transparent 
-            opacity={dragState.handle === handle ? 1.0 : 0.8} 
+            opacity={dragStateRef.current.handle === handle ? 1.0 : 0.8} 
             depthTest={false} 
           />
         </mesh>
