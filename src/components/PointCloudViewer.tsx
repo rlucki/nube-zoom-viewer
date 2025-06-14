@@ -66,7 +66,7 @@ export const PointCloudViewer: React.FC = () => {
   const [transparency, setTransparency] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const [dragSensitivity, setDragSensitivity] = useState(0.003); // FIX: add this line
+  const [dragSensitivity, setDragSensitivity] = useState(0.003);
 
   const controlsRef = useRef<any>(null);
   const { toast } = useToast();
@@ -412,6 +412,9 @@ export const PointCloudViewer: React.FC = () => {
         setOrthoMode={setOrthoMode}
         measurements={measurements}
         onClearMeasurements={handleClearMeasurements}
+        dragSensitivity={dragSensitivity}
+        setDragSensitivity={setDragSensitivity}
+        showSectionSensitivity={sectionBoxActive}
       />
 
       {/* ---------- Panel de ajustes ---------------------------------------- */}
@@ -433,22 +436,7 @@ export const PointCloudViewer: React.FC = () => {
         isPointCloud={sampledPoints.length > 0}
         hasIFCModel={ifcModels.length > 0}
       />
-      {/* --- Section Box Sensitivity --- */}
-      <div className="absolute top-[350px] left-4 z-10 w-72 bg-black/80 rounded-b-lg px-4 pb-3 pt-2">
-        <label className="text-xs text-gray-400">Sensibilidad sección</label>
-        <input
-          type="range"
-          min={0.0004}
-          max={0.007}
-          step={0.0001}
-          value={dragSensitivity}
-          onChange={e => setDragSensitivity(Number(e.target.value))}
-          className="w-full accent-cyan-500"
-        />
-        <div className="text-xs text-gray-400">
-          Sensibilidad: {(dragSensitivity*1000).toFixed(2)}
-        </div>
-      </div>
+      {/* --- QUITADO: Section Box Sensitivity Slider --- */}
 
       {/* ---------- Overlay de carga --------------------------------------- */}
       {isLoading && (
@@ -474,8 +462,6 @@ export const PointCloudViewer: React.FC = () => {
         onCreated={({ gl, scene }) => {
           gl.localClippingEnabled = true;
           gl.setClearColor('#1a1a1a', 1);
-          
-          // Configurar el renderer para clipping
           gl.clippingPlanes = [];
           gl.localClippingEnabled = true;
         }}

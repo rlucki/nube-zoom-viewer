@@ -95,10 +95,20 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     ];
 
     scene.traverse((child) => {
-      if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && !child.userData.isSectionBox) {
+      if (child instanceof THREE.Mesh && !child.userData.isSectionBox) {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         materials.forEach((material) => {
           if (material) {
+            material.clippingPlanes = planes;
+            material.needsUpdate = true;
+          }
+        });
+      }
+      if (child instanceof THREE.Points && !child.userData.isSectionBox) {
+        // Solo aplica si el material admite clippingPlanes (caso de PointsMaterial estándar)
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((material: any) => {
+          if (material && 'clippingPlanes' in material) {
             material.clippingPlanes = planes;
             material.needsUpdate = true;
           }

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Upload, RotateCcw, Move, Ruler, RotateCw, Box, Trash2, Rotate3d } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,11 @@ interface TopToolbarProps {
   setOrthoMode: (mode: 'none' | 'x' | 'y' | 'z') => void;
   measurements: Array<{ distance: number; points: [any, any] }>;
   onClearMeasurements: () => void;
+
+  // nuevos props
+  dragSensitivity: number;
+  setDragSensitivity: (value: number) => void;
+  showSectionSensitivity?: boolean;
 }
 
 export const TopToolbar: React.FC<TopToolbarProps> = ({
@@ -48,13 +54,30 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   setOrthoMode,
   measurements,
   onClearMeasurements,
+  dragSensitivity,
+  setDragSensitivity,
+  showSectionSensitivity,
 }) => {
+  // La barra será más alta cuando hay controles secundarios o slider activo
+  const hasExtendedTools = measurementActive || transformActive || showSectionSensitivity;
+
   return (
     <div className="absolute top-0 left-0 right-0 z-20">
       {/* Barra principal de herramientas */}
-      <div className="flex items-center justify-between bg-black/90 backdrop-blur-sm border-b border-gray-700 px-4 py-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-white mr-4">
+      <div
+        className={`
+          flex flex-wrap items-center justify-between
+          bg-black/90 backdrop-blur-sm border-b border-gray-700 px-4
+          transition-all duration-300
+          ${hasExtendedTools ? 'h-28 py-3' : 'h-14 py-2'}
+        `}
+        style={{
+          minHeight: hasExtendedTools ? 88 : 56,
+          alignItems: 'flex-start'
+        }}
+      >
+        <div className={`flex flex-wrap items-center gap-3 w-full`}>
+          <h1 className="text-xl font-bold text-white mr-4 min-w-fit mb-2 mt-0">
             Visor de Nubes de Puntos
           </h1>
           
@@ -160,6 +183,25 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
             </Button>
           )}
         </div>
+        {/* SECTION BOX SENSITIVITY SLIDER */}
+        {showSectionSensitivity && (
+          <div className="w-full mt-3 flex flex-col items-start animate-fade-in">
+            <label className="text-xs text-cyan-300 mb-1">Sensibilidad Sección (Section Box)</label>
+            <input
+              type="range"
+              min={0.0004}
+              max={0.007}
+              step={0.0001}
+              value={dragSensitivity}
+              onChange={e => setDragSensitivity(Number(e.target.value))}
+              className="w-60 accent-cyan-500"
+              style={{marginBottom: '4px'}}
+            />
+            <div className="text-xs text-cyan-300">
+              Sensibilidad: {(dragSensitivity*1000).toFixed(2)}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Barra secundaria sutil para controles ortogonales y snap */}
@@ -212,3 +254,4 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
     </div>
   );
 };
+
