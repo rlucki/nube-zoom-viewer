@@ -1,9 +1,11 @@
+
 import React, {
   useState,
   useRef,
   useMemo,
   useCallback,
   useEffect,
+  useLayoutEffect,
 } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
@@ -266,6 +268,33 @@ export const PointCloudViewer: React.FC = () => {
   /* -------------------------------------------------------------------------- */
   const InternalScene = () => {
     const { scene } = useThree();
+    const contentGroupRef = useRef<THREE.Group>(null);
+
+    useLayoutEffect(() => {
+      const group = contentGroupRef.current;
+      if (group && loadedFiles.length > 0) {
+        // Retrasamos un instante para asegurar que todos los hijos se hayan montado
+        const timer = setTimeout(() => {
+          if (!contentGroupRef.current) return;
+
+          const box = new THREE.Box3().setFromObject(contentGroupRef.current);
+
+          if (!box.isEmpty()) {
+            const center = box.getCenter(new THREE.Vector3());
+            contentGroupRef.current.position.sub(center); // Centramos el grupo en el origen
+
+            // Actualizamos el target de OrbitControls para que apunte al nuevo centro
+            if (controlsRef.current) {
+              controlsRef.current.target.set(0, 0, 0);
+              controlsRef.current.update();
+            }
+          }
+        }, 0);
+        return () => clearTimeout(timer);
+      } else if (group) {
+        group.position.set(0, 0, 0);
+      }
+    }, [loadedFiles]);
 
     /* -- Limpiamos clipping cuando se desactiva la herramienta -------------- */
     useEffect(() => {
@@ -289,23 +318,25 @@ export const PointCloudViewer: React.FC = () => {
     return (
       <>
         <Scene>
-          {/* Point-cloud */}
-          {sampledPoints.length > 0 && (
-            <PointCloud
-              points={sampledPoints}
-              pointSize={pointSize}
-              colorMode={colorMode}
-            />
-          )}
+          <group ref={contentGroupRef}>
+            {/* Point-cloud */}
+            {sampledPoints.length > 0 && (
+              <PointCloud
+                points={sampledPoints}
+                pointSize={pointSize}
+                colorMode={colorMode}
+              />
+            )}
 
-          {/* Modelos IFC */}
-          {ifcModels.map((file) => (
-            <IFCModel
-              key={file.id}
-              geometry={file.data as IFCGeometry}
-              transparency={transparency}
-            />
-          ))}
+            {/* Modelos IFC */}
+            {ifcModels.map((file) => (
+              <IFCModel
+                key={file.id}
+                geometry={file.data as IFCGeometry}
+                transparency={transparency}
+              />
+            ))}
+          </group>
 
           {/* Selector de objetos (solo para Transformación) */}
           <ObjectSelector

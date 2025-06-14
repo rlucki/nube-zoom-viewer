@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { IFCGeometry } from './PointCloudViewer';
@@ -41,27 +40,10 @@ export const IFCModel: React.FC<IFCModelProps> = ({
       groupRef.current!.add(meshClone);
     });
 
-    /* ---------- 2. Build one Box3 that encloses the entire model ---------- */
-    const globalBox = new THREE.Box3();
-    meshesRef.current.forEach((mesh) => {
-      mesh.geometry.computeBoundingBox();          // make sure each mesh has a bounding box
-      if (mesh.geometry.boundingBox) {
-        globalBox.union(mesh.geometry.boundingBox);
-      }
-    });
-
-    /* ---------- 3. Move the whole group so its centre becomes (0, 0, 0) ---------- */
-    const centre = new THREE.Vector3();
-    globalBox.getCenter(centre);
-    groupRef.current.position.set(-centre.x, -centre.y, -centre.z);
-
-    /* Optional: uniform scaling so IFC in millimetres matches point cloud in metres.
-       Example (1/1000 => mm → m):
-       const size = new THREE.Vector3();
-       globalBox.getSize(size);
-       const unitScale = 1 / 1000;
-       groupRef.current.scale.set(unitScale, unitScale, unitScale);
-    */
+    // Se ha eliminado la lógica de recentrado que estaba aquí.
+    // El componente ahora renderiza los meshes en sus coordenadas originales,
+    // y el centrado se gestionará de forma global en el componente padre.
+    
   }, [geometry]);
 
   /* ---------- 4. Update transparency every time the slider changes ---------- */
