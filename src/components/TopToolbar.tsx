@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Upload, RotateCcw, Move, Ruler, RotateCw, Box, Trash2 } from 'lucide-react';
+import { Upload, RotateCcw, Move, Ruler, RotateCw, Box, Trash2, Rotate3d } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileUploader } from './FileUploader';
@@ -101,7 +100,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               className="text-white border-gray-600 hover:bg-gray-700 bg-gray-800"
               title={transformMode === 'translate' ? 'Cambiar a Rotación' : 'Cambiar a Movimiento'}
             >
-              {transformMode === 'translate' ? <RotateCw className="h-4 w-4" /> : <Move className="h-4 w-4" />}
+              {transformMode === 'translate' ? <Rotate3d className="h-4 w-4" /> : <Move className="h-4 w-4" />}
             </Button>
           )}
 
