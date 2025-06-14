@@ -277,35 +277,37 @@ export const PointCloudViewer: React.FC = () => {
   /* -------------------------------------------------------------------------- */
   /*  Escena interna (luces, modelos, etc.)                                     */
   /* -------------------------------------------------------------------------- */
+  const centeredGroupRef = useRef<{ centered: boolean }>({ centered: false });
+
   const InternalScene = () => {
     const { scene } = useThree();
     const contentGroupRef = useRef<THREE.Group>(null);
 
     useLayoutEffect(() => {
-      const group = contentGroupRef.current;
-      if (group && loadedFiles.length > 0) {
-        // Retrasamos un instante para asegurar que todos los hijos se hayan montado
-        const timer = setTimeout(() => {
-          if (!contentGroupRef.current) return;
-
-          const box = new THREE.Box3().setFromObject(contentGroupRef.current);
+      // SOLO centrar el grupo si NO ha sido recentrado 
+      // y el número de archivos cargados ha cambiado (es decir, se ha cargado uno nuevo)
+      if (contentGroupRef.current && loadedFiles.length > 0 && !centeredGroupRef.current.centered) {
+        setTimeout(() => {
+          const group = contentGroupRef.current;
+          if (!group) return;
+          const box = new THREE.Box3().setFromObject(group);
 
           if (!box.isEmpty()) {
             const center = box.getCenter(new THREE.Vector3());
-            contentGroupRef.current.position.sub(center); // Centramos el grupo en el origen
-
-            // Actualizamos el target de OrbitControls para que apunte al nuevo centro
+            group.position.sub(center);
             if (controlsRef.current) {
               controlsRef.current.target.set(0, 0, 0);
               controlsRef.current.update();
             }
+            centeredGroupRef.current.centered = true;
           }
         }, 0);
-        return () => clearTimeout(timer);
-      } else if (group) {
-        group.position.set(0, 0, 0);
       }
-    }, [loadedFiles]);
+      // Si *no* hay archivos, volvemos a permitir el centrado la próxima vez que se suban archivos
+      if (loadedFiles.length === 0) {
+        centeredGroupRef.current.centered = false;
+      }
+    }, [loadedFiles.length]); // SOLO depende del número de archivos cargados
 
     /* -- Limpiamos clipping cuando se desactiva la herramienta -------------- */
     useEffect(() => {
