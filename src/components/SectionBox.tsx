@@ -1,11 +1,10 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 
 interface SectionBoxProps {
   isActive: boolean;
-  onDragStateChange?: (isDragging: boolean) => void;
+  onDragStateChange?: (isDragging: boolean, target?: string) => void;
 }
 
 export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateChange }) => {
@@ -144,9 +143,9 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [bounds]);
 
-  // Inicio del arrastre
+  // Inicio del arrastre - mejorado
   const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>, handle: string) => {
-    if (!bounds) return;
+    if (!bounds || isDragging) return;
     
     e.stopPropagation();
     
@@ -163,24 +162,34 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     };
     
     setIsDragging(true);
-    onDragStateChange?.(true);
+    onDragStateChange?.(true, handle);
+    
+    // Prevenir eventos de cámara inmediatamente
+    gl.domElement.style.pointerEvents = 'none';
+    setTimeout(() => {
+      gl.domElement.style.pointerEvents = 'auto';
+    }, 0);
+    
     gl.domElement.style.cursor = 'grabbing';
     
     console.log('Section Box drag started:', handle, 'initial value:', currentValue);
-  }, [bounds, gl, onDragStateChange]);
+  }, [bounds, isDragging, gl, onDragStateChange]);
 
-  // Movimiento durante el arrastre - usando useCallback con dependencias específicas
+  // Movimiento durante el arrastre - simplificado y mejorado
   const handleGlobalPointerMove = useCallback((e: PointerEvent) => {
     if (!dragStateRef.current.active || !bounds || !dragStateRef.current.startMouse) {
       return;
     }
 
+    e.preventDefault();
+    e.stopPropagation();
+
     const deltaX = e.clientX - dragStateRef.current.startMouse.x;
     const deltaY = e.clientY - dragStateRef.current.startMouse.y;
     
-    // Factor de sensibilidad mejorado
+    // Factor de sensibilidad optimizado
     const cameraDistance = camera.position.length();
-    const sensitivity = cameraDistance * 0.002;
+    const sensitivity = Math.max(cameraDistance * 0.001, 0.01);
     
     let movement = 0;
     switch (dragStateRef.current.axis) {
@@ -199,7 +208,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     const finalMovement = e.shiftKey ? movement * 0.1 : movement;
     
     const newBounds = { min: bounds.min.clone(), max: bounds.max.clone() };
-    const minSize = 0.5;
+    const minSize = 0.1; // Tamaño mínimo más pequeño
     
     if (dragStateRef.current.handle?.endsWith('min')) {
       const newValue = dragStateRef.current.startValue + finalMovement;
@@ -212,9 +221,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     setBounds(newBounds);
   }, [bounds, camera]);
 
-  // Fin del arrastre - usando useCallback
-  const handleGlobalPointerUp = useCallback(() => {
+  // Fin del arrastre - mejorado
+  const handleGlobalPointerUp = useCallback((e: PointerEvent) => {
     if (dragStateRef.current.active) {
+      e.preventDefault();
+      e.stopPropagation();
+      
       console.log('Section Box drag ended - position maintained');
       dragStateRef.current.active = false;
       setIsDragging(false);
@@ -223,20 +235,22 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [onDragStateChange, gl]);
 
-  // Event listeners globales - con cleanup adecuado
+  // Event listeners globales - mejorados
   useEffect(() => {
     if (isDragging && dragStateRef.current.active) {
-      const cleanup = () => {
-        document.removeEventListener('pointermove', handleGlobalPointerMove);
-        document.removeEventListener('pointerup', handleGlobalPointerUp);
-        document.removeEventListener('pointercancel', handleGlobalPointerUp);
-      };
+      // Usar capture para interceptar eventos antes que otros handlers
+      const moveOptions = { capture: true, passive: false };
+      const upOptions = { capture: true };
 
-      document.addEventListener('pointermove', handleGlobalPointerMove, { passive: false });
-      document.addEventListener('pointerup', handleGlobalPointerUp);
-      document.addEventListener('pointercancel', handleGlobalPointerUp);
+      document.addEventListener('pointermove', handleGlobalPointerMove, moveOptions);
+      document.addEventListener('pointerup', handleGlobalPointerUp, upOptions);
+      document.addEventListener('pointercancel', handleGlobalPointerUp, upOptions);
       
-      return cleanup;
+      return () => {
+        document.removeEventListener('pointermove', handleGlobalPointerMove, moveOptions);
+        document.removeEventListener('pointerup', handleGlobalPointerUp, upOptions);
+        document.removeEventListener('pointercancel', handleGlobalPointerUp, upOptions);
+      };
     }
   }, [isDragging, handleGlobalPointerMove, handleGlobalPointerUp]);
 

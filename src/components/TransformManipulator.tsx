@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import { TransformControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
@@ -21,43 +20,42 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
   const { camera, gl } = useThree();
   const dragStateRef = useRef({ isDragging: false });
 
-  // Configurar eventos de arrastre con mejor gestión
+  // Configurar eventos de arrastre - simplificado y mejorado
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
 
     const handleDraggingChanged = (event: any) => {
       const isDragging = event.value;
+      
+      // Evitar múltiples eventos del mismo tipo
+      if (dragStateRef.current.isDragging === isDragging) return;
+      
       dragStateRef.current.isDragging = isDragging;
       
       console.log('Transform Controls dragging:', isDragging);
       onDraggingChange?.(isDragging);
       
-      // Cambiar cursor y configurar modo
       if (isDragging) {
         gl.domElement.style.cursor = 'grabbing';
-        // Asegurar que el control permanezca activo durante el arrastre
         controls.enabled = true;
         controls.visible = true;
       } else {
         gl.domElement.style.cursor = 'default';
-        // Forzar actualización del objeto después del arrastre
         if (object) {
           object.updateMatrixWorld(true);
-          // Disparar evento de cambio para notificar que se completó la transformación
           console.log('Transform completed for object:', object.name || object.type);
         }
       }
     };
 
     const handleObjectChange = () => {
-      console.log('Transform Controls object changed');
-      if (object) {
+      if (object && !dragStateRef.current.isDragging) {
         object.updateMatrixWorld(true);
       }
     };
 
-    // Usar addEventListener con options para mejor control
+    // Usar once: false para eventos repetitivos
     controls.addEventListener('dragging-changed', handleDraggingChanged);
     controls.addEventListener('objectChange', handleObjectChange);
     
@@ -165,10 +163,8 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       space="world"
       enabled={true}
       userData={{ isTransformControl: true }}
-      // Configuraciones mejoradas para estabilidad
-      axis={null}
-      translationSnap={mode === 'translate' ? 0.1 : undefined}
-      rotationSnap={mode === 'rotate' ? THREE.MathUtils.degToRad(15) : undefined}
+      translationSnap={mode === 'translate' ? 0.05 : undefined}
+      rotationSnap={mode === 'rotate' ? THREE.MathUtils.degToRad(5) : undefined}
     />
   );
 };

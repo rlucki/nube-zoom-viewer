@@ -1,4 +1,3 @@
-
 import React, {
   useState,
   useRef,
@@ -20,6 +19,7 @@ import { ObjectSelector } from './ObjectSelector';
 import { TransformManipulator } from './TransformManipulator';
 import { TopToolbar } from './TopToolbar';
 import { Scene } from './Scene';
+import { useDragState } from '../hooks/useDragState';
 
 import { useToast } from '@/hooks/use-toast';
 
@@ -202,34 +202,36 @@ export const PointCloudViewer: React.FC = () => {
   );
 
   /* -------------------- Activación herramientas mejorada ------------------ */
-  const handleSectionBoxToggle = useCallback(
-    (active: boolean) => {
-      console.log('Section Box toggle:', active);
-      
-      // Limpiar otras herramientas
-      if (active) {
-        setTransformActive(false);
-        setMeasurementActive(false);
-        setSelectedObject(null);
-      }
-      
-      setSectionBoxActive(active);
-      setToolStateReset(prev => prev + 1); // Forzar reset de estado
-      
-      toast({
-        title: active
-          ? 'Herramienta de sección activada'
-          : 'Herramienta de sección desactivada',
-        description: active
-          ? 'Arrastra los controles de colores para seccionar el modelo'
-          : 'Sección desactivada',
-      });
-    },
-    [toast],
-  );
+  const { dragState, startDrag, endDrag, cancelDrag } = useDragState();
+
+  const handleSectionBoxToggle = useCallback((active: boolean) => {
+    console.log('Section Box toggle:', active);
+    
+    // Limpiar otras herramientas
+    if (active) {
+      setTransformActive(false);
+      setMeasurementActive(false);
+      setSelectedObject(null);
+    }
+    
+    setSectionBoxActive(active);
+    setToolStateReset(prev => prev + 1); // Forzar reset de estado
+    
+    toast({
+      title: active
+        ? 'Herramienta de sección activada'
+        : 'Herramienta de sección desactivada',
+      description: active
+        ? 'Arrastra los controles de colores para seccionar el modelo'
+        : 'Sección desactivada',
+    });
+  }, [toast, cancelDrag]);
 
   const handleTransformToggle = useCallback((active: boolean) => {
     console.log('Transform toggle:', active);
+    
+    // Cancelar cualquier drag activo
+    cancelDrag();
     
     // Limpiar otras herramientas
     if (active) {
@@ -247,10 +249,13 @@ export const PointCloudViewer: React.FC = () => {
       title: active ? 'Herramienta de transformación activada' : 'Herramienta de transformación desactivada',
       description: active ? 'Selecciona un objeto haciendo clic sobre él' : 'Transformaciones deshabilitadas',
     });
-  }, [toast]);
+  }, [toast, cancelDrag]);
 
   const handleMeasurementToggle = useCallback((active: boolean) => {
     console.log('Measurement toggle:', active);
+    
+    // Cancelar cualquier drag activo
+    cancelDrag();
     
     // Limpiar otras herramientas
     if (active) {
@@ -261,7 +266,7 @@ export const PointCloudViewer: React.FC = () => {
     
     setMeasurementActive(active);
     setToolStateReset(prev => prev + 1); // Forzar reset de estado
-  }, []);
+  }, [cancelDrag]);
 
   /* -------------------------------------------------------------------------- */
   /*  Escena interna (luces, modelos, etc.)                                     */
@@ -341,7 +346,7 @@ export const PointCloudViewer: React.FC = () => {
           {/* Selector de objetos (solo para Transformación) */}
           <ObjectSelector
             isActive={transformActive}
-            isDragging={isDragging}
+            isDragging={dragState.isDragging}
             onObjectHover={() => {}}
             onObjectSelect={handleObjectSelection}
           />
@@ -355,30 +360,42 @@ export const PointCloudViewer: React.FC = () => {
             onSnapModeChange={setSnapMode}
           />
 
-          {/* Caja de sección - ahora funciona automáticamente */}
+          {/* Caja de sección - con manejo centralizado de drag */}
           <SectionBox
             isActive={sectionBoxActive}
-            onDragStateChange={setIsDragging}
+            onDragStateChange={(isDragging, target) => {
+              if (isDragging) {
+                handleDragStart('section', target);
+              } else {
+                handleDragEnd();
+              }
+            }}
           />
 
-          {/* Manipulador de transformación */}
+          {/* Manipulador de transformación - con manejo centralizado de drag */}
           <TransformManipulator
             object={selectedObject}
             isActive={transformActive}
             mode={transformMode}
-            onDraggingChange={setIsTransformDragging}
+            onDraggingChange={(isDragging) => {
+              if (isDragging) {
+                handleDragStart('transform');
+              } else {
+                handleDragEnd();
+              }
+            }}
           />
 
-          {/* Controles de cámara */}
+          {/* Controles de cámara - mejorados para evitar conflictos */}
           <OrbitControls
             ref={controlsRef}
-            enablePan
-            enableZoom
-            enableRotate
+            enablePan={!dragState.isDragging}
+            enableZoom={!dragState.isDragging}
+            enableRotate={!dragState.isDragging}
+            enabled={!dragState.isDragging}
             zoomSpeed={0.6}
             panSpeed={0.8}
             rotateSpeed={0.4}
-            enabled={!isTransformDragging && !isDragging}
           />
 
           {/* Stats */}
