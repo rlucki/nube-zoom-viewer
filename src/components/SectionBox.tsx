@@ -182,7 +182,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     console.log('Section Box drag started:', handle, 'initial value:', currentValue);
   }, [bounds, isDragging, gl, onDragStateChange]);
 
-  // Movimiento durante el arrastre - simplificado y mejorado
+  // Movimiento durante el arrastre - sensibilidad ajustada
   const handleGlobalPointerMove = useCallback((e: PointerEvent) => {
     if (!dragStateRef.current.active || !bounds || !dragStateRef.current.startMouse) {
       return;
@@ -194,10 +194,10 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     const deltaX = e.clientX - dragStateRef.current.startMouse.x;
     const deltaY = e.clientY - dragStateRef.current.startMouse.y;
     
-    // Factor de sensibilidad optimizado
+    // Sensibilidad ajustada para mayor suavidad
     const cameraDistance = camera.position.length();
-    const sensitivity = Math.max(cameraDistance * 0.001, 0.01);
-    
+    const sensitivity = Math.max(cameraDistance * 0.0025, 0.008); // Ajuste aquí
+
     let movement = 0;
     switch (dragStateRef.current.axis) {
       case 'x':
