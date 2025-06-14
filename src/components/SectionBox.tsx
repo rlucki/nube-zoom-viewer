@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
@@ -143,9 +144,9 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [bounds]);
 
-  // Inicio del arrastre - mejorado
+  // Inicio del arrastre
   const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>, handle: string) => {
-    if (!bounds || isDragging) return;
+    if (!bounds) return;
     
     e.stopPropagation();
     
@@ -164,18 +165,12 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     setIsDragging(true);
     onDragStateChange?.(true, handle);
     
-    // Prevenir eventos de cámara inmediatamente
-    gl.domElement.style.pointerEvents = 'none';
-    setTimeout(() => {
-      gl.domElement.style.pointerEvents = 'auto';
-    }, 0);
-    
     gl.domElement.style.cursor = 'grabbing';
     
     console.log('Section Box drag started:', handle, 'initial value:', currentValue);
-  }, [bounds, isDragging, gl, onDragStateChange]);
+  }, [bounds, gl, onDragStateChange]);
 
-  // Movimiento durante el arrastre - simplificado y mejorado
+  // Movimiento durante el arrastre
   const handleGlobalPointerMove = useCallback((e: PointerEvent) => {
     if (!dragStateRef.current.active || !bounds || !dragStateRef.current.startMouse) {
       return;
@@ -187,7 +182,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     const deltaX = e.clientX - dragStateRef.current.startMouse.x;
     const deltaY = e.clientY - dragStateRef.current.startMouse.y;
     
-    // Factor de sensibilidad optimizado
     const cameraDistance = camera.position.length();
     const sensitivity = Math.max(cameraDistance * 0.001, 0.01);
     
@@ -204,11 +198,10 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
         break;
     }
 
-    // Aplicar modo fino con Shift
     const finalMovement = e.shiftKey ? movement * 0.1 : movement;
     
     const newBounds = { min: bounds.min.clone(), max: bounds.max.clone() };
-    const minSize = 0.1; // Tamaño mínimo más pequeño
+    const minSize = 0.1;
     
     if (dragStateRef.current.handle?.endsWith('min')) {
       const newValue = dragStateRef.current.startValue + finalMovement;
@@ -219,15 +212,17 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
     
     setBounds(newBounds);
-  }, [bounds, camera]);
+    // Aplicar clipping inmediatamente mientras arrastramos
+    applyClipping(newBounds);
+  }, [bounds, camera, applyClipping]);
 
-  // Fin del arrastre - mejorado
+  // Fin del arrastre
   const handleGlobalPointerUp = useCallback((e: PointerEvent) => {
     if (dragStateRef.current.active) {
       e.preventDefault();
       e.stopPropagation();
       
-      console.log('Section Box drag ended - position maintained');
+      console.log('Section Box drag ended');
       dragStateRef.current.active = false;
       setIsDragging(false);
       onDragStateChange?.(false);
@@ -235,10 +230,9 @@ export const SectionBox: React.FC<SectionBoxProps> = ({ isActive, onDragStateCha
     }
   }, [onDragStateChange, gl]);
 
-  // Event listeners globales - mejorados
+  // Event listeners globales
   useEffect(() => {
     if (isDragging && dragStateRef.current.active) {
-      // Usar capture para interceptar eventos antes que otros handlers
       const moveOptions = { capture: true, passive: false };
       const upOptions = { capture: true };
 
