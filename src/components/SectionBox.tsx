@@ -182,7 +182,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     console.log('Section Box drag started:', handle, 'initial value:', currentValue);
   }, [bounds, isDragging, gl, onDragStateChange]);
 
-  // Movimiento durante el arrastre - sensibilidad ajustada
+  // Movimiento durante el arrastre - sensibilidad ajustada para suavidad intermedia
   const handleGlobalPointerMove = useCallback((e: PointerEvent) => {
     if (!dragStateRef.current.active || !bounds || !dragStateRef.current.startMouse) {
       return;
@@ -193,10 +193,10 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
 
     const deltaX = e.clientX - dragStateRef.current.startMouse.x;
     const deltaY = e.clientY - dragStateRef.current.startMouse.y;
-    
-    // Sensibilidad ajustada para mayor suavidad
+
+    // Sensibilidad más suave e intermedia
     const cameraDistance = camera.position.length();
-    const sensitivity = Math.max(cameraDistance * 0.0025, 0.008); // Ajuste aquí
+    const sensitivity = Math.max(cameraDistance * 0.0012, 0.0035);
 
     let movement = 0;
     switch (dragStateRef.current.axis) {
@@ -213,10 +213,10 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
 
     // Aplicar modo fino con Shift
     const finalMovement = e.shiftKey ? movement * 0.1 : movement;
-    
+
     const newBounds = { min: bounds.min.clone(), max: bounds.max.clone() };
-    const minSize = 0.1; // Tamaño mínimo más pequeño
-    
+    const minSize = 0.1;
+
     if (dragStateRef.current.handle?.endsWith('min')) {
       const newValue = dragStateRef.current.startValue + finalMovement;
       newBounds.min[dragStateRef.current.axis!] = Math.min(newValue, newBounds.max[dragStateRef.current.axis!] - minSize);
@@ -224,7 +224,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       const newValue = dragStateRef.current.startValue + finalMovement;
       newBounds.max[dragStateRef.current.axis!] = Math.max(newValue, newBounds.min[dragStateRef.current.axis!] + minSize);
     }
-    
+
     setBounds(newBounds);
   }, [bounds, camera]);
 
