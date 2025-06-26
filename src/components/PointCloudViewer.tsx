@@ -359,6 +359,21 @@ export const PointCloudViewer: React.FC = () => {
             onObjectSelect={handleObjectSelection}
           />
 
+          {/* Manipulador de transformación */}
+          <TransformManipulator
+            object={selectedObject}
+            isActive={transformActive}
+            mode={transformMode}
+            onDraggingChange={(dragging) => {
+              setIsTransformDragging(dragging);
+              if (dragging) {
+                startDrag('transform');
+              } else {
+                endDrag();
+              }
+            }}
+          />
+
           {/* Herramienta de medición */}
           <MeasurementTool
             isActive={measurementActive}
