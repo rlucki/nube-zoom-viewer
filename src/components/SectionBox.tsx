@@ -29,12 +29,14 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     startValue: number;
     startMouse: THREE.Vector2 | null;
     active: boolean;
+    cameraMatrix: THREE.Matrix4 | null;
   }>({
     handle: null,
     axis: null,
     startValue: 0,
     startMouse: null,
-    active: false
+    active: false,
+    cameraMatrix: null
   });
 
   const boxRef = useRef<THREE.Group>(null);
@@ -152,6 +154,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
         startValue: 0,
         startMouse: null,
         active: false,
+        cameraMatrix: null,
       };
     }
   }, [isActive, removeClipping]);
@@ -165,7 +168,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     }
   }, [bounds]);
 
-  // Inicio del arrastre - mejorado
+  // Inicio del arrastre - mejorado con matriz de cámara
   const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>, handle: string) => {
     if (!bounds || isDragging) return;
     
@@ -175,12 +178,16 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     const isMin = handle.endsWith('min');
     const currentValue = isMin ? bounds.min[axis] : bounds.max[axis];
     
+    // Capturar la matriz de la cámara en el momento del inicio del drag
+    const cameraMatrix = camera.matrixWorld.clone();
+    
     dragStateRef.current = {
       handle,
       axis,
       startValue: currentValue,
       startMouse: new THREE.Vector2(e.nativeEvent.clientX, e.nativeEvent.clientY),
-      active: true
+      active: true,
+      cameraMatrix
     };
     
     setIsDragging(true);
@@ -195,11 +202,11 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     gl.domElement.style.cursor = 'grabbing';
     
     console.log('Section Box drag started:', handle, 'initial value:', currentValue);
-  }, [bounds, isDragging, gl, onDragStateChange]);
+  }, [bounds, isDragging, gl, onDragStateChange, camera]);
 
-  // Movimiento durante el arrastre, usando sensibilidad proveniente de la UI
+  // Movimiento durante el arrastre - corregido para orientación de cámara
   const handleGlobalPointerMove = useCallback((e: PointerEvent) => {
-    if (!dragStateRef.current.active || !bounds || !dragStateRef.current.startMouse) {
+    if (!dragStateRef.current.active || !bounds || !dragStateRef.current.startMouse || !dragStateRef.current.cameraMatrix) {
       return;
     }
 
@@ -210,19 +217,31 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     const deltaY = e.clientY - dragStateRef.current.startMouse.y;
 
     const cameraDistance = camera.position.length();
-    // Sensibilidad controlada por UI (dragSensitivity), a escalar por distancia
     const sensitivity = Math.max(cameraDistance * dragSensitivity, 0.001);
 
+    // Obtener los vectores right y up de la cámara desde su matriz world
+    const cameraRight = new THREE.Vector3();
+    const cameraUp = new THREE.Vector3();
+    const cameraForward = new THREE.Vector3();
+    
+    dragStateRef.current.cameraMatrix.extractBasis(cameraRight, cameraUp, cameraForward);
+
     let movement = 0;
+    
     switch (dragStateRef.current.axis) {
       case 'x':
-        movement = deltaX * sensitivity;
+        // Para X: usar componente X del vector right de la cámara
+        movement = deltaX * sensitivity * Math.sign(cameraRight.x);
         break;
       case 'y':
-        movement = -deltaY * sensitivity;
+        // Para Y: usar componente Y del vector up de la cámara (invertido porque Y screen crece hacia abajo)
+        movement = -deltaY * sensitivity * Math.sign(cameraUp.y);
         break;
       case 'z':
-        movement = deltaY * sensitivity;
+        // Para Z: usar la combinación más intuitiva basada en la orientación de la cámara
+        // Si la cámara está mirando en dirección +Z, deltaY positivo debería aumentar Z
+        // Si está mirando en dirección -Z, deltaY positivo debería disminuir Z
+        movement = deltaY * sensitivity * Math.sign(-cameraForward.z);
         break;
     }
 
@@ -348,14 +367,6 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
       ].map((h) => (
         <Handle key={h.handle} {...h} />
       ))}
-
-      {/* Slider UI para sensibilidad */}
-      {/* Si lo necesitas dentro del canvas, activa esto...
-      {onDragSensitivityChange && (
-        <group position={[center.x, bounds.max.y + 2.8 * size.y, center.z]}>
-        </group>
-      )}
-      */}
     </group>
   );
 };
