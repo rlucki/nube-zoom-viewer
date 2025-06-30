@@ -20,6 +20,8 @@ import { TransformManipulator } from './TransformManipulator';
 import { TopToolbar } from './TopToolbar';
 import { Scene } from './Scene';
 import { useDragState } from '../hooks/useDragState';
+import { usePrimitiveDetection } from '../hooks/usePrimitiveDetection';
+import { PrimitiveVisualizer } from './PrimitiveVisualizer';
 
 import { useToast } from '@/hooks/use-toast';
 
@@ -89,6 +91,20 @@ export const PointCloudViewer: React.FC = () => {
     min: THREE.Vector3;
     max: THREE.Vector3;
   } | null>(null);
+
+  /* -------------------- Nuevo: Estados de detección de primitivas ---------- */
+  const {
+    primitives,
+    isDetecting,
+    params: detectionParams,
+    detectPrimitives,
+    clearPrimitives,
+    updateParams: updateDetectionParams,
+    getSnapPoint,
+  } = usePrimitiveDetection();
+  
+  const [primitiveDetectionActive, setPrimitiveDetectionActive] = useState(false);
+  const [showPrimitives, setShowPrimitives] = useState(true);
 
   /* -------------------- Mensaje de bienvenida ------------------------------ */
   useEffect(() => {
@@ -192,6 +208,40 @@ export const PointCloudViewer: React.FC = () => {
     });
   }, [toast]);
 
+  /* -------------------- Mejorar medición con primitivas ------------------- */
+  const enhancedHandleMeasurement = useCallback(
+    (distance: number, points: [THREE.Vector3, THREE.Vector3]) => {
+      let enhancedDescription = `Distancia: ${distance.toFixed(3)} m`;
+      
+      if (primitives.length > 0) {
+        // Verificar si los puntos están cerca de primitivas detectadas
+        const [p1, p2] = points;
+        const snapThreshold = 0.2;
+        
+        const p1Primitive = primitives.find(prim => {
+          const snapPoint = getSnapPoint(p1, prim);
+          return p1.distanceTo(snapPoint) < snapThreshold;
+        });
+        
+        const p2Primitive = primitives.find(prim => {
+          const snapPoint = getSnapPoint(p2, prim);
+          return p2.distanceTo(snapPoint) < snapThreshold;
+        });
+        
+        if (p1Primitive || p2Primitive) {
+          enhancedDescription += ' (con snap a primitiva)';
+        }
+      }
+      
+      setMeasurements((p) => [...p, { distance, points }]);
+      toast({
+        title: 'Medición completada',
+        description: enhancedDescription,
+      });
+    },
+    [primitives, getSnapPoint, toast],
+  );
+
   /* -------------------- Selección de objetos mejorada --------------------- */
   const handleObjectSelection = useCallback(
     (object: THREE.Object3D | null) => {
@@ -274,6 +324,36 @@ export const PointCloudViewer: React.FC = () => {
     setToolStateReset(prev => prev + 1); // Forzar reset de estado
   }, [cancelDrag]);
 
+  const handleDetectPrimitives = useCallback(() => {
+    if (sampledPoints.length === 0) {
+      toast({
+        title: 'No hay puntos',
+        description: 'Carga una nube de puntos primero',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    detectPrimitives(sampledPoints);
+    setPrimitiveDetectionActive(true);
+    setShowPrimitives(true);
+    
+    toast({
+      title: 'Detectando primitivas',
+      description: 'Analizando la nube de puntos...',
+    });
+  }, [sampledPoints, detectPrimitives, toast]);
+
+  const handleClearPrimitives = useCallback(() => {
+    clearPrimitives();
+    setPrimitiveDetectionActive(false);
+    setShowPrimitives(false);
+    toast({
+      title: 'Primitivas limpiadas',
+      description: 'Todas las primitivas detectadas han sido eliminadas',
+    });
+  }, [clearPrimitives, toast]);
+
   /* -------------------------------------------------------------------------- */
   /*  Escena interna (luces, modelos, etc.)                                     */
   /* -------------------------------------------------------------------------- */
@@ -349,6 +429,12 @@ export const PointCloudViewer: React.FC = () => {
                 transparency={transparency}
               />
             ))}
+
+            {/* Visualización de primitivas detectadas */}
+            <PrimitiveVisualizer
+              primitives={primitives}
+              visible={showPrimitives && primitiveDetectionActive}
+            />
           </group>
 
           {/* Selector de objetos (solo para Transformación) */}
@@ -374,12 +460,12 @@ export const PointCloudViewer: React.FC = () => {
             }}
           />
 
-          {/* Herramienta de medición */}
+          {/* Herramienta de medición mejorada */}
           <MeasurementTool
             isActive={measurementActive}
             snapMode={snapMode}
             orthoMode={orthoMode}
-            onMeasure={handleMeasurement}
+            onMeasure={enhancedHandleMeasurement}
             onSnapModeChange={setSnapMode}
           />
 
@@ -432,6 +518,14 @@ export const PointCloudViewer: React.FC = () => {
         dragSensitivity={dragSensitivity}
         setDragSensitivity={setDragSensitivity}
         showSectionSensitivity={sectionBoxActive}
+        // Nuevos props para primitivas
+        primitiveDetectionActive={primitiveDetectionActive}
+        onDetectPrimitives={handleDetectPrimitives}
+        onClearPrimitives={handleClearPrimitives}
+        primitiveCount={primitives.length}
+        isDetecting={isDetecting}
+        showPrimitives={showPrimitives}
+        onToggleShowPrimitives={setShowPrimitives}
       />
 
       {/* ---------- Panel de ajustes ---------------------------------------- */}

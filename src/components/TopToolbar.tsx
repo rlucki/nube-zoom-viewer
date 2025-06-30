@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Upload, RotateCcw, Move, Ruler, RotateCw, Box, Trash2, Rotate3d } from 'lucide-react';
+import { Upload, RotateCcw, Move, Ruler, RotateCw, Box, Trash2, Rotate3d, Scan, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileUploader } from './FileUploader';
@@ -31,6 +30,15 @@ interface TopToolbarProps {
   dragSensitivity: number;
   setDragSensitivity: (value: number) => void;
   showSectionSensitivity?: boolean;
+
+  // Nuevos props para primitivas
+  primitiveDetectionActive: boolean;
+  onDetectPrimitives: () => void;
+  onClearPrimitives: () => void;
+  primitiveCount: number;
+  isDetecting: boolean;
+  showPrimitives: boolean;
+  onToggleShowPrimitives: (show: boolean) => void;
 }
 
 export const TopToolbar: React.FC<TopToolbarProps> = ({
@@ -57,13 +65,19 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   dragSensitivity,
   setDragSensitivity,
   showSectionSensitivity,
+  primitiveDetectionActive,
+  onDetectPrimitives,
+  onClearPrimitives,
+  primitiveCount,
+  isDetecting,
+  showPrimitives,
+  onToggleShowPrimitives,
 }) => {
   // La barra será más alta cuando hay controles secundarios o slider activo
   const hasExtendedTools = measurementActive || transformActive || showSectionSensitivity;
 
   return (
     <div className="absolute top-0 left-0 right-0 z-20">
-      {/* Barra principal de herramientas */}
       <div
         className={`
           flex flex-wrap items-center justify-between
@@ -182,7 +196,53 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               Limpiar Mediciones
             </Button>
           )}
+
+          {/* Detectar Primitivas */}
+          <Button
+            onClick={onDetectPrimitives}
+            disabled={isDetecting || !hasFiles}
+            variant="outline"
+            size="sm"
+            className={`text-white border-gray-600 ${
+              primitiveDetectionActive 
+                ? "bg-cyan-600 hover:bg-cyan-700" 
+                : "bg-gray-800 hover:bg-gray-700"
+            }`}
+            title="Detectar Planos y Cilindros"
+          >
+            <Scan className="h-4 w-4" />
+            {isDetecting && <span className="ml-1 text-xs">...</span>}
+          </Button>
+
+          {/* Toggle Visibilidad Primitivas */}
+          {primitiveCount > 0 && (
+            <Button
+              onClick={() => onToggleShowPrimitives(!showPrimitives)}
+              variant="outline"
+              size="sm"
+              className="text-white border-gray-600 hover:bg-gray-700 bg-gray-800"
+              title={showPrimitives ? "Ocultar Primitivas" : "Mostrar Primitivas"}
+            >
+              {showPrimitives ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            </Button>
+
+          )}
+
+          {/* Limpiar Primitivas */}
+          {primitiveCount > 0 && (
+            <Button
+              onClick={onClearPrimitives}
+              variant="outline"
+              size="sm"
+              className="text-cyan-400 border-cyan-600 hover:bg-cyan-700 hover:text-white bg-gray-800"
+              title="Limpiar Primitivas"
+            >
+              Limpiar Primitivas ({primitiveCount})
+            </Button>
+          )}
+
         </div>
+        
         {/* SECTION BOX SENSITIVITY SLIDER */}
         {showSectionSensitivity && (
           <div className="w-full mt-3 flex flex-col items-start animate-fade-in">
@@ -254,4 +314,3 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
     </div>
   );
 };
-
