@@ -381,6 +381,33 @@ export const PointCloudViewer: React.FC = () => {
     });
   }, [clearPrimitives, toast]);
 
+  /* -------------------- Estados de arrastre mejorados ---------------------- */
+  const [isTransformDragging, setIsTransformDragging] = useState(false);
+  const [cameraControlsEnabled, setCameraControlsEnabled] = useState(true);
+
+  /* -------------------- Mejorar control de cámara -------------------------- */
+  const updateCameraControls = useCallback((enabled: boolean) => {
+    setCameraControlsEnabled(enabled);
+    if (controlsRef.current) {
+      controlsRef.current.enabled = enabled;
+    }
+  }, []);
+
+  // Manejar arrastre de transformación
+  const handleTransformDragChange = useCallback((dragging: boolean) => {
+    console.log('Transform dragging changed:', dragging);
+    setIsTransformDragging(dragging);
+    
+    // Desactivar controles de cámara durante el arrastre de transformación
+    updateCameraControls(!dragging);
+    
+    if (dragging) {
+      startDrag('transform');
+    } else {
+      endDrag();
+    }
+  }, [startDrag, endDrag, updateCameraControls]);
+
   /* -------------------------------------------------------------------------- */
   /*  Escena interna (luces, modelos, etc.)                                     */
   /* -------------------------------------------------------------------------- */
@@ -466,8 +493,8 @@ export const PointCloudViewer: React.FC = () => {
 
           {/* Selector de objetos (solo para Transformación) */}
           <ObjectSelector
-            isActive={transformActive}
-            isDragging={dragState.isDragging}
+            isActive={transformActive && !isTransformDragging}
+            isDragging={isTransformDragging}
             onObjectHover={() => {}}
             onObjectSelect={handleObjectSelection}
           />
@@ -477,14 +504,7 @@ export const PointCloudViewer: React.FC = () => {
             object={selectedObject}
             isActive={transformActive}
             mode={transformMode}
-            onDraggingChange={(dragging) => {
-              setIsTransformDragging(dragging);
-              if (dragging) {
-                startDrag('transform');
-              } else {
-                endDrag();
-              }
-            }}
+            onDraggingChange={handleTransformDragChange}
           />
 
           {/* Herramienta de medición mejorada */}
@@ -496,13 +516,13 @@ export const PointCloudViewer: React.FC = () => {
             onSnapModeChange={setSnapMode}
           />
 
-          {/* Controles de cámara - mejorados para evitar conflictos */}
+          {/* Controles de cámara - completamente deshabilitados durante transformaciones */}
           <OrbitControls
             ref={controlsRef}
-            enablePan={!dragState.isDragging}
-            enableZoom={!dragState.isDragging}
-            enableRotate={!dragState.isDragging}
-            enabled={!dragState.isDragging}
+            enablePan={cameraControlsEnabled && !transformActive}
+            enableZoom={cameraControlsEnabled && !transformActive}
+            enableRotate={cameraControlsEnabled && !transformActive}
+            enabled={cameraControlsEnabled && !transformActive}
             zoomSpeed={0.6}
             panSpeed={0.8}
             rotateSpeed={0.4}

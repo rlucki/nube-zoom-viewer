@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { TransformControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
@@ -18,111 +19,77 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
 }) => {
   const controlsRef = useRef<any>(null);
   const { camera, gl } = useThree();
-  const dragStateRef = useRef({ isDragging: false });
-  const [hoveredAxis, setHoveredAxis] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
-  // Configurar eventos de arrastre - simplificado y mejorado
+  // Manejar eventos de arrastre de forma más robusta
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
 
-    const handleDraggingChanged = (event: any) => {
-      const isDragging = event.value;
+    const handleDragStart = (event: any) => {
+      console.log('Transform drag started');
+      setIsDragging(true);
+      onDraggingChange?.(true);
+      gl.domElement.style.cursor = 'grabbing';
+    };
+
+    const handleDragEnd = (event: any) => {
+      console.log('Transform drag ended');
+      setIsDragging(false);
+      onDraggingChange?.(false);
+      gl.domElement.style.cursor = 'default';
       
-      // Evitar múltiples eventos del mismo tipo
-      if (dragStateRef.current.isDragging === isDragging) return;
-      
-      dragStateRef.current.isDragging = isDragging;
-      
-      console.log('Transform Controls dragging:', isDragging);
-      onDraggingChange?.(isDragging);
-      
-      if (isDragging) {
-        gl.domElement.style.cursor = 'grabbing';
-        controls.enabled = true;
-        controls.visible = true;
-      } else {
-        gl.domElement.style.cursor = 'default';
-        if (object) {
-          object.updateMatrixWorld(true);
-          console.log('Transform completed for object:', object.name || object.type);
-        }
+      if (object) {
+        object.updateMatrixWorld(true);
+        console.log('Transform completed for object:', object.name || object.type);
       }
     };
 
     const handleObjectChange = () => {
-      if (object && !dragStateRef.current.isDragging) {
+      if (object && isDragging) {
         object.updateMatrixWorld(true);
       }
     };
 
-    const handleMouseMove = (event: any) => {
-      if (!controls || !isActive || !object) return;
-      
-      const intersectedAxis = controls.axis;
-      setHoveredAxis(intersectedAxis);
-      
-      // Cambiar cursor basado en el eje intersectado
-      if (intersectedAxis) {
-        gl.domElement.style.cursor = 'grab';
+    // Eventos mejorados
+    controls.addEventListener('dragging-changed', (event: any) => {
+      if (event.value) {
+        handleDragStart(event);
       } else {
-        gl.domElement.style.cursor = 'default';
+        handleDragEnd(event);
       }
-    };
-
-    // Usar once: false para eventos repetitivos
-    controls.addEventListener('dragging-changed', handleDraggingChanged);
+    });
+    
     controls.addEventListener('objectChange', handleObjectChange);
-    controls.addEventListener('mouseMove', handleMouseMove);
     
     return () => {
       if (controls) {
-        controls.removeEventListener('dragging-changed', handleDraggingChanged);
+        controls.removeEventListener('dragging-changed', handleDragStart);
+        controls.removeEventListener('dragging-changed', handleDragEnd);
         controls.removeEventListener('objectChange', handleObjectChange);
-        controls.removeEventListener('mouseMove', handleMouseMove);
       }
     };
-  }, [onDraggingChange, gl, object]);
+  }, [onDraggingChange, gl, object, isDragging]);
 
-  // Vincular/desvincular objeto con mejor manejo de errores
+  // Configurar y vincular objeto
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
 
-    // Limpiar estado previo
-    if (controls.object && controls.object !== object) {
-      console.log('Detaching previous object from transform controls');
-      controls.detach();
-    }
-
     if (isActive && object && object.parent) {
       console.log('Attaching object to transform controls:', object.name || object.type);
       try {
-        // Configurar primero, luego adjuntar
+        // Configurar controles
         controls.mode = mode;
         controls.enabled = true;
         controls.visible = true;
-        
-        // Adjuntar el objeto
-        controls.attach(object);
-        
-        // Configuración adicional después de adjuntar
         controls.size = 1.2;
         controls.space = 'world';
         
-        // Personalizar colores para mejor visibilidad
-        if (controls.children.length > 0) {
-          const gizmo = controls.children[0];
-          if (gizmo.children) {
-            gizmo.children.forEach((child: any) => {
-              if (child.material) {
-                child.material.transparent = true;
-                child.material.opacity = hoveredAxis === child.name ? 1.0 : 0.8;
-              }
-            });
-          }
-        }
+        // Adjuntar objeto
+        controls.attach(object);
         
+        // Configurar snapping
         if (mode === 'translate') {
           controls.translationSnap = 0.1;
           controls.rotationSnap = null;
@@ -130,6 +97,14 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
           controls.translationSnap = null;
           controls.rotationSnap = THREE.MathUtils.degToRad(15);
         }
+        
+        console.log('Transform Controls configured:', {
+          enabled: controls.enabled,
+          visible: controls.visible,
+          mode: controls.mode,
+          hasObject: !!object,
+          objectName: object?.name || object?.type
+        });
         
       } catch (error) {
         console.error('Error attaching object to transform controls:', error);
@@ -142,38 +117,11 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     }
 
     return () => {
-      if (controls && controls.object && !dragStateRef.current.isDragging) {
+      if (controls && controls.object && !isDragging) {
         controls.detach();
       }
     };
-  }, [object, isActive, mode]);
-
-  // Configurar controles solo cuando sea necesario
-  useEffect(() => {
-    const controls = controlsRef.current;
-    if (!controls) return;
-
-    // Solo configurar si hay cambios reales
-    if (controls.mode !== mode) {
-      controls.mode = mode;
-    }
-    
-    if (controls.enabled !== (isActive && !!object)) {
-      controls.enabled = isActive && !!object;
-    }
-    
-    if (controls.visible !== (isActive && !!object)) {
-      controls.visible = isActive && !!object;
-    }
-    
-    console.log('Transform Controls configured:', {
-      enabled: controls.enabled,
-      visible: controls.visible,
-      mode: controls.mode,
-      hasObject: !!object,
-      objectName: object?.name || object?.type
-    });
-  }, [isActive, object, mode]);
+  }, [object, isActive, mode, isDragging]);
 
   // No renderizar si no está activo
   if (!isActive || !object) {
