@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { SVD } from 'svd-js';
 import type { Point } from '../components/PointCloudViewer';
@@ -59,7 +60,8 @@ function bestFitTransform(src: THREE.Vector3[], dst: THREE.Vector3[]): THREE.Mat
   const t = dstCentroid.clone().sub(srcCentroid.applyMatrix3(rotation));
 
   const m = new THREE.Matrix4();
-  m.makeRotationFromMatrix(rotation);
+  const quaternion = new THREE.Quaternion().setFromRotationMatrix(rotation);
+  m.makeRotationFromQuaternion(quaternion);
   m.setPosition(t);
   return m;
 }

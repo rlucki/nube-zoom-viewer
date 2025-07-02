@@ -1,3 +1,4 @@
+
 import { load } from '@loaders.gl/core';
 import { LASLoader } from '@loaders.gl/las';
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
@@ -36,7 +37,7 @@ export async function loadPointCloud(
   if (fmt === 'las') {
     interface LASPoint { position: [number, number, number]; intensity?: number; color?: [number, number, number]; }
     interface LASData { points: LASPoint[] }
-    const data = await load(url, LASLoader, { worker: false }) as LASData;
+    const data = await load(url, LASLoader, { worker: false }) as unknown as LASData;
     points = data.points.map((p) => ({
       x: p.position[0],
       y: p.position[1],

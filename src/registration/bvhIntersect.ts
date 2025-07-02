@@ -1,3 +1,4 @@
+
 import { MeshBVH, acceleratedRaycast } from 'three-mesh-bvh';
 import * as THREE from 'three';
 
@@ -14,7 +15,7 @@ export interface BVHContext {
 export function buildBVH(mesh: THREE.Mesh): BVHContext {
   const geometry = mesh.geometry as THREE.BufferGeometry & { boundsTree?: MeshBVH };
   if (!geometry.boundsTree) {
-    geometry.boundsTree = new MeshBVH(geometry, { lazyGeneration: false });
+    geometry.boundsTree = new MeshBVH(geometry);
   }
   return { mesh, bvh: geometry.boundsTree };
 }
@@ -22,6 +23,6 @@ export function buildBVH(mesh: THREE.Mesh): BVHContext {
 /** Encuentra el punto más cercano en el BVH y devuelve la distancia al mismo. */
 export function closestPoint(context: BVHContext, point: THREE.Vector3): { point: THREE.Vector3; distance: number } {
   const target = new THREE.Vector3();
-  const distance = context.bvh.closestPointToPoint(point, target);
-  return { point: target, distance: Math.sqrt(distance) };
+  const result = context.bvh.closestPointToPoint(point, target);
+  return { point: target, distance: result.distance };
 }

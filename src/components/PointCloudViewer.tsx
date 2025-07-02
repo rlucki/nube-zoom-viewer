@@ -382,7 +382,6 @@ export const PointCloudViewer: React.FC = () => {
   }, [clearPrimitives, toast]);
 
   /* -------------------- Estados de arrastre mejorados ---------------------- */
-  const [isTransformDragging, setIsTransformDragging] = useState(false);
   const [cameraControlsEnabled, setCameraControlsEnabled] = useState(true);
 
   /* -------------------- Mejorar control de cámara -------------------------- */
