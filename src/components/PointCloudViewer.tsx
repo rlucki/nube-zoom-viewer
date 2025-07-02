@@ -22,6 +22,9 @@ import { Scene } from './Scene';
 import { useDragState } from '../hooks/useDragState';
 import { usePrimitiveDetection } from '../hooks/usePrimitiveDetection';
 import { PrimitiveVisualizer } from './PrimitiveVisualizer';
+import { ProgressPanel } from './ProgressPanel';
+import { buildBVH } from '../registration/bvhIntersect';
+import { computeCoverage, CoverageMap } from '../registration/progressMetrics';
 
 import { useToast } from '@/hooks/use-toast';
 
@@ -106,6 +109,10 @@ export const PointCloudViewer: React.FC = () => {
   const [primitiveDetectionActive, setPrimitiveDetectionActive] = useState(false);
   const [showPrimitives, setShowPrimitives] = useState(true);
 
+  /* -------------------- Estados de progreso ------------------------------- */
+  const [progressData, setProgressData] = useState<CoverageMap | null>(null);
+  const [showProgress, setShowProgress] = useState(false);
+
   /* -------------------- Mensaje de bienvenida ------------------------------ */
   useEffect(() => {
     toast({
@@ -176,6 +183,8 @@ export const PointCloudViewer: React.FC = () => {
     setSectionBoxActive(false);
     setTransformActive(false);
     setSectionBoxBounds(null); // Solo aquí se limpia la caja de sección
+    setProgressData(null);
+    setShowProgress(false);
     toast({
       title: 'Datos limpiados',
       description: 'Todos los archivos han sido eliminados',
@@ -207,6 +216,16 @@ export const PointCloudViewer: React.FC = () => {
       description: 'Todas las mediciones han sido eliminadas',
     });
   }, [toast]);
+
+  const handleComputeProgress = useCallback(() => {
+    if (ifcModels.length === 0 || sampledPoints.length === 0) return;
+    const mesh = (ifcModels[0].data as IFCGeometry).meshes[0];
+    const ctx = buildBVH(mesh);
+    const coverage = computeCoverage(sampledPoints, ctx);
+    setProgressData(coverage);
+    setShowProgress(true);
+    toast({ title: 'Progreso calculado', description: 'Cobertura analizada' });
+  }, [ifcModels, sampledPoints, toast]);
 
   /* -------------------- Mejorar medición con primitivas ------------------- */
   const enhancedHandleMeasurement = useCallback(
@@ -526,6 +545,8 @@ export const PointCloudViewer: React.FC = () => {
         isDetecting={isDetecting}
         showPrimitives={showPrimitives}
         onToggleShowPrimitives={setShowPrimitives}
+        onComputeProgress={handleComputeProgress}
+        hasIFC={ifcModels.length > 0}
       />
 
       {/* ---------- Panel de ajustes ---------------------------------------- */}
@@ -547,6 +568,10 @@ export const PointCloudViewer: React.FC = () => {
         isPointCloud={sampledPoints.length > 0}
         hasIFCModel={ifcModels.length > 0}
       />
+
+      {showProgress && (
+        <ProgressPanel data={progressData} onClose={() => setShowProgress(false)} />
+      )}
       {/* --- QUITADO: Section Box Sensitivity Slider --- */}
 
       {/* ---------- Overlay de carga --------------------------------------- */}
