@@ -85,6 +85,11 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
 
       try {
+        // Ensure the object updates its matrices when modified
+        object.traverse((child) => {
+          child.matrixAutoUpdate = true;
+        });
+
         controls.attach(object);
         controls.setMode(mode);
         
