@@ -39,6 +39,10 @@ interface TopToolbarProps {
   isDetecting: boolean;
   showPrimitives: boolean;
   onToggleShowPrimitives: (show: boolean) => void;
+
+  // Progreso
+  onComputeProgress: () => void;
+  hasIFC: boolean;
 }
 
 export const TopToolbar: React.FC<TopToolbarProps> = ({
@@ -72,6 +76,8 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   isDetecting,
   showPrimitives,
   onToggleShowPrimitives,
+  onComputeProgress,
+  hasIFC,
 }) => {
   // La barra será más alta cuando hay controles secundarios o slider activo
   const hasExtendedTools = measurementActive || transformActive || showSectionSensitivity;
@@ -238,6 +244,19 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               title="Limpiar Primitivas"
             >
               Limpiar Primitivas ({primitiveCount})
+            </Button>
+          )}
+
+          {/* Calcular Progreso */}
+          {hasIFC && (
+            <Button
+              onClick={onComputeProgress}
+              variant="outline"
+              size="sm"
+              className="text-white border-gray-600 hover:bg-gray-700 bg-gray-800"
+              title="Calcular Progreso"
+            >
+              Progreso IFC
             </Button>
           )}
 
