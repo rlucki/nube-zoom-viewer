@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { TransformControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -19,6 +19,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
   const controlsRef = useRef<any>(null);
   const { camera, gl } = useThree();
   const dragStateRef = useRef({ isDragging: false });
+  const [hoveredAxis, setHoveredAxis] = useState<string | null>(null);
 
   // Configurar eventos de arrastre - simplificado y mejorado
   useEffect(() => {
@@ -55,14 +56,30 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
     };
 
+    const handleMouseMove = (event: any) => {
+      if (!controls || !isActive || !object) return;
+      
+      const intersectedAxis = controls.axis;
+      setHoveredAxis(intersectedAxis);
+      
+      // Cambiar cursor basado en el eje intersectado
+      if (intersectedAxis) {
+        gl.domElement.style.cursor = 'grab';
+      } else {
+        gl.domElement.style.cursor = 'default';
+      }
+    };
+
     // Usar once: false para eventos repetitivos
     controls.addEventListener('dragging-changed', handleDraggingChanged);
     controls.addEventListener('objectChange', handleObjectChange);
+    controls.addEventListener('mouseMove', handleMouseMove);
     
     return () => {
       if (controls) {
         controls.removeEventListener('dragging-changed', handleDraggingChanged);
         controls.removeEventListener('objectChange', handleObjectChange);
+        controls.removeEventListener('mouseMove', handleMouseMove);
       }
     };
   }, [onDraggingChange, gl, object]);
@@ -92,6 +109,19 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
         // Configuración adicional después de adjuntar
         controls.size = 1.2;
         controls.space = 'world';
+        
+        // Personalizar colores para mejor visibilidad
+        if (controls.children.length > 0) {
+          const gizmo = controls.children[0];
+          if (gizmo.children) {
+            gizmo.children.forEach((child: any) => {
+              if (child.material) {
+                child.material.transparent = true;
+                child.material.opacity = hoveredAxis === child.name ? 1.0 : 0.8;
+              }
+            });
+          }
+        }
         
         if (mode === 'translate') {
           controls.translationSnap = 0.1;

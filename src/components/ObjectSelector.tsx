@@ -53,10 +53,13 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         originalMaterials.current.set(obj, obj.material);
       }
       
-      const hoverMaterial = new THREE.MeshBasicMaterial({
-        color: 0x80c2ff,
+      // Material de hover más sutil y elegante
+      const hoverMaterial = new THREE.MeshStandardMaterial({
+        color: 0x88ccff,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.6,
+        emissive: 0x002244,
+        emissiveIntensity: 0.3,
       });
       
       obj.material = hoverMaterial;
@@ -65,10 +68,12 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 
   const setSelectMaterial = (obj: THREE.Object3D) => {
     if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
-      const selectMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff6600,
+      const selectMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffaa44,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.7,
+        emissive: 0x441100,
+        emissiveIntensity: 0.4,
       });
       
       obj.material = selectMaterial;

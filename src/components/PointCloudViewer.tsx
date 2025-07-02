@@ -17,6 +17,7 @@ import { MeasurementTool } from './MeasurementTool';
 import { SectionBox } from './SectionBox';
 import { ObjectSelector } from './ObjectSelector';
 import { TransformManipulator } from './TransformManipulator';
+import { TransformDisplay } from './TransformDisplay';
 import { TopToolbar } from './TopToolbar';
 import { Scene } from './Scene';
 import { useDragState } from '../hooks/useDragState';
@@ -256,6 +257,13 @@ export const PointCloudViewer: React.FC = () => {
     },
     [transformActive, toast],
   );
+
+  const handleTransformReset = useCallback(() => {
+    toast({
+      title: 'Transformación reiniciada',
+      description: 'El objeto ha vuelto a su posición original',
+    });
+  }, [toast]);
 
   /* -------------------- Activación herramientas mejorada ------------------ */
   const { dragState, startDrag, endDrag, cancelDrag } = useDragState();
@@ -526,6 +534,14 @@ export const PointCloudViewer: React.FC = () => {
         isDetecting={isDetecting}
         showPrimitives={showPrimitives}
         onToggleShowPrimitives={setShowPrimitives}
+      />
+
+      {/* ---------- Display de transformación -------------------------------- */}
+      <TransformDisplay
+        object={selectedObject}
+        mode={transformMode}
+        isVisible={transformActive && selectedObject !== null}
+        onReset={handleTransformReset}
       />
 
       {/* ---------- Panel de ajustes ---------------------------------------- */}
