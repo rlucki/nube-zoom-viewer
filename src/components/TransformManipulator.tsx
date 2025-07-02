@@ -21,19 +21,19 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
   const { camera, gl } = useThree();
   const [isDragging, setIsDragging] = useState(false);
 
-  // Manejar eventos de arrastre de forma más robusta
+  // Manejar eventos de arrastre
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
 
-    const handleDragStart = (event: any) => {
+    const handleDragStart = () => {
       console.log('Transform drag started');
       setIsDragging(true);
       onDraggingChange?.(true);
       gl.domElement.style.cursor = 'grabbing';
     };
 
-    const handleDragEnd = (event: any) => {
+    const handleDragEnd = () => {
       console.log('Transform drag ended');
       setIsDragging(false);
       onDraggingChange?.(false);
@@ -51,12 +51,11 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
     };
 
-    // Eventos mejorados
     controls.addEventListener('dragging-changed', (event: any) => {
       if (event.value) {
-        handleDragStart(event);
+        handleDragStart();
       } else {
-        handleDragEnd(event);
+        handleDragEnd();
       }
     });
     
@@ -71,49 +70,43 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     };
   }, [onDraggingChange, gl, object, isDragging]);
 
-  // Configurar y vincular objeto
+  // Configurar y vincular objeto - simplificado
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
 
-    if (isActive && object && object.parent) {
+    if (isActive && object) {
       console.log('Attaching object to transform controls:', object.name || object.type);
+      
+      // Asegurar que el objeto esté en la escena
+      if (!object.parent) {
+        console.warn('Object has no parent, skipping attach');
+        return;
+      }
+
       try {
-        // Configurar controles
-        controls.mode = mode;
-        controls.enabled = true;
-        controls.visible = true;
-        controls.size = 1.2;
-        controls.space = 'world';
-        
-        // Adjuntar objeto
         controls.attach(object);
+        controls.setMode(mode);
         
         // Configurar snapping
         if (mode === 'translate') {
-          controls.translationSnap = 0.1;
-          controls.rotationSnap = null;
+          controls.setTranslationSnap(0.1);
+          controls.setRotationSnap(null);
         } else if (mode === 'rotate') {
-          controls.translationSnap = null;
-          controls.rotationSnap = THREE.MathUtils.degToRad(15);
+          controls.setTranslationSnap(null);
+          controls.setRotationSnap(THREE.MathUtils.degToRad(15));
         }
         
-        console.log('Transform Controls configured:', {
-          enabled: controls.enabled,
-          visible: controls.visible,
-          mode: controls.mode,
-          hasObject: !!object,
-          objectName: object?.name || object?.type
-        });
+        console.log('Transform Controls attached successfully');
         
       } catch (error) {
         console.error('Error attaching object to transform controls:', error);
       }
     } else {
       console.log('Detaching from transform controls');
-      controls.detach();
-      controls.visible = false;
-      controls.enabled = false;
+      if (controls.object) {
+        controls.detach();
+      }
     }
 
     return () => {
@@ -123,7 +116,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     };
   }, [object, isActive, mode, isDragging]);
 
-  // No renderizar si no está activo
+  // No renderizar si no está activo o no hay objeto
   if (!isActive || !object) {
     return null;
   }
@@ -134,15 +127,13 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       mode={mode}
       camera={camera}
       domElement={gl.domElement}
-      size={1.2}
+      size={1.5}
       showX={true}
       showY={true}
       showZ={true}
       space="world"
       enabled={true}
       userData={{ isTransformControl: true }}
-      translationSnap={mode === 'translate' ? 0.05 : undefined}
-      rotationSnap={mode === 'rotate' ? THREE.MathUtils.degToRad(5) : undefined}
     />
   );
 };
