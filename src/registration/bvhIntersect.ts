@@ -27,6 +27,6 @@ export function closestPoint(context: BVHContext, point: THREE.Vector3): { point
     distance: 0,
     faceIndex: 0
   };
-  const distance = context.bvh.closestPointToPoint(point, hitInfo);
-  return { point: hitInfo.point.clone(), distance };
+  context.bvh.closestPointToPoint(point, hitInfo);
+  return { point: hitInfo.point.clone(), distance: hitInfo.distance };
 }
