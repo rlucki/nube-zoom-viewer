@@ -51,6 +51,14 @@ function bestFitTransform(src: THREE.Vector3[], dst: THREE.Vector3[]): THREE.Mat
         R[i][j] = v[i][0] * u[j][0] + v[i][1] * u[j][1] + v[i][2] * u[j][2];
   }
 
+  // Convert Matrix3 to Matrix4 properly
+  const rotationMatrix4 = new THREE.Matrix4().set(
+    R[0][0], R[0][1], R[0][2], 0,
+    R[1][0], R[1][1], R[1][2], 0,
+    R[2][0], R[2][1], R[2][2], 0,
+    0, 0, 0, 1
+  );
+
   const rotation = new THREE.Matrix3().set(
     R[0][0], R[0][1], R[0][2],
     R[1][0], R[1][1], R[1][2],
@@ -60,7 +68,7 @@ function bestFitTransform(src: THREE.Vector3[], dst: THREE.Vector3[]): THREE.Mat
   const t = dstCentroid.clone().sub(srcCentroid.applyMatrix3(rotation));
 
   const m = new THREE.Matrix4();
-  const quaternion = new THREE.Quaternion().setFromRotationMatrix(rotation);
+  const quaternion = new THREE.Quaternion().setFromRotationMatrix(rotationMatrix4);
   m.makeRotationFromQuaternion(quaternion);
   m.setPosition(t);
   return m;
