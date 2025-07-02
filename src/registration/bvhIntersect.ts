@@ -22,7 +22,7 @@ export function buildBVH(mesh: THREE.Mesh): BVHContext {
 
 /** Encuentra el punto más cercano en el BVH y devuelve la distancia al mismo. */
 export function closestPoint(context: BVHContext, point: THREE.Vector3): { point: THREE.Vector3; distance: number } {
-  const target = {};
-  const result = context.bvh.closestPointToPoint(point, target);
-  return { point: result.point.clone(), distance: result.distance };
+  const target = new THREE.Vector3();
+  const distance = context.bvh.closestPointToPoint(point, target);
+  return { point: target.clone(), distance };
 }
