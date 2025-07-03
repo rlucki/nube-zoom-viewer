@@ -39,7 +39,6 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         objects.push(child);
       }
     });
-    console.log('Selectable objects found:', objects.length);
     return objects;
   };
 
@@ -90,23 +89,50 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     }
   };
 
-  const findBestParent = (obj: THREE.Object3D): THREE.Object3D => {
-    // Para IFC y modelos complejos, buscar el grupo padre más significativo
-    let current = obj;
-    let bestParent = obj;
+  // Nueva función para detectar si el click es en controles de transformación
+  const isTransformControlClick = (event: MouseEvent): boolean => {
+    const rect = gl.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    raycaster.current.setFromCamera(mouse, camera);
     
-    while (current.parent && current.parent.type !== 'Scene') {
-      current = current.parent;
-      if (current instanceof THREE.Group || current.userData.isModel) {
-        bestParent = current;
+    // Buscar objetos de transform controls
+    const transformObjects: THREE.Object3D[] = [];
+    scene.traverse((child) => {
+      if (
+        child.userData.isTransformControl ||
+        child.name.includes('TransformControls') ||
+        (child.parent && child.parent.userData.isTransformControl)
+      ) {
+        transformObjects.push(child);
       }
+    });
+
+    if (transformObjects.length > 0) {
+      const intersects = raycaster.current.intersectObjects(transformObjects, true);
+      return intersects.length > 0;
     }
-    
-    return bestParent;
+
+    return false;
   };
 
   const handleMouseMove = (event: MouseEvent) => {
     if (!isActive || isDragging) return;
+
+    // No hacer hover si estamos sobre controles de transformación
+    if (isTransformControlClick(event)) {
+      // Restaurar material anterior si había hover
+      if (hovered && hovered !== selected) {
+        restoreOriginalMaterial(hovered);
+      }
+      setHovered(null);
+      onObjectHover?.(null);
+      gl.domElement.style.cursor = 'default';
+      return;
+    }
 
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
@@ -134,8 +160,6 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         setHovered(targetObject);
         onObjectHover?.(targetObject);
         gl.domElement.style.cursor = 'pointer';
-        
-        console.log('Hovering object:', targetObject.name || targetObject.type);
       }
     } else {
       if (hovered && hovered !== selected) {
@@ -150,7 +174,13 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   const handleClick = (event: MouseEvent) => {
     if (!isActive || isDragging) return;
 
-    // Prevenir que el evento se propague a los controles de cámara
+    // CRÍTICO: No interceptar clicks en controles de transformación
+    if (isTransformControlClick(event)) {
+      console.log('Click intercepted on transform controls - allowing it to pass through');
+      return; // Permitir que el evento llegue a los controles
+    }
+
+    // Prevenir que el evento se propague solo si NO es en controles de transformación
     event.stopPropagation();
 
     if (hovered) {
@@ -179,11 +209,12 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     if (isActive && !isDragging) {
       const canvas = gl.domElement;
       canvas.addEventListener('mousemove', handleMouseMove, { passive: true });
-      canvas.addEventListener('click', handleClick, { capture: true });
+      // Cambiar a capture: false para permitir que los controles intercepten primero
+      canvas.addEventListener('click', handleClick, { capture: false });
 
       return () => {
         canvas.removeEventListener('mousemove', handleMouseMove);
-        canvas.removeEventListener('click', handleClick, { capture: true });
+        canvas.removeEventListener('click', handleClick, { capture: false });
       };
     }
   }, [isActive, isDragging, hovered, selected]);

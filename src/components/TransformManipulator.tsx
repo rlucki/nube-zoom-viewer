@@ -53,26 +53,21 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     };
 
     // Eventos de TransformControls
-    controls.addEventListener('dragging-changed', (event: any) => {
+    const onDraggingChanged = (event: any) => {
       if (event.value) {
         handleDragStart();
       } else {
         handleDragEnd();
       }
-    });
-    
+    };
+
+    controls.addEventListener('dragging-changed', onDraggingChanged);
     controls.addEventListener('objectChange', handleObjectChange);
     
     return () => {
       if (controls) {
         try {
-          controls.removeEventListener('dragging-changed', (event: any) => {
-            if (event.value) {
-              handleDragStart();
-            } else {
-              handleDragEnd();
-            }
-          });
+          controls.removeEventListener('dragging-changed', onDraggingChanged);
           controls.removeEventListener('objectChange', handleObjectChange);
         } catch (error) {
           console.warn('Error removing event listeners:', error);
@@ -103,7 +98,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
         
         // Configurar modo y propiedades
         controls.setMode(mode);
-        controls.setSize(1.5);
+        controls.setSize(1.2); // Hacer los controles un poco más grandes
         
         // Habilitar todos los ejes
         controls.showX = true;
@@ -122,8 +117,14 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
           controls.setRotationSnap(THREE.MathUtils.degToRad(15));
         }
         
-        // Asegurar que los controles están habilitados
+        // CRÍTICO: Asegurar que los controles están habilitados y pueden interceptar eventos
         controls.enabled = true;
+        
+        // Marcar objetos de controles para identificación
+        controls.traverse((child: THREE.Object3D) => {
+          child.userData.isTransformControl = true;
+        });
+        controls.userData.isTransformControl = true;
         
         console.log('Transform Controls configured successfully');
         console.log('- Mode:', mode);
@@ -157,13 +158,23 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       mode={mode}
       camera={camera}
       domElement={gl.domElement}
-      size={1.5}
+      size={1.2}
       showX={true}
       showY={true}
       showZ={true}
       space="world"
-      enabled={!isDragging} // Cambio importante: habilitar cuando NO está arrastrando
+      enabled={true} // Siempre habilitado cuando está activo
       userData={{ isTransformControl: true }}
+      // Asegurar que los controles tienen prioridad en los eventos
+      onPointerDown={(e) => {
+        console.log('Transform controls pointer down');
+        e.stopPropagation();
+      }}
+      onPointerMove={(e) => {
+        if (isDragging) {
+          e.stopPropagation();
+        }
+      }}
     />
   );
 };
