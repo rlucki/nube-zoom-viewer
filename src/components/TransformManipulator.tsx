@@ -52,7 +52,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
     };
 
-    // Eventos de TransformControls
+    // Eventos de TransformControls - MEJORADOS
     const onDraggingChanged = (event: any) => {
       console.log('Dragging changed event:', event.value);
       if (event.value) {
@@ -66,13 +66,11 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     const onMouseDown = (event: any) => {
       console.log('Transform controls mouse down');
       event.stopPropagation();
-      event.stopImmediatePropagation();
     };
 
     const onMouseUp = (event: any) => {
       console.log('Transform controls mouse up');
       event.stopPropagation();
-      event.stopImmediatePropagation();
     };
 
     controls.addEventListener('dragging-changed', onDraggingChanged);
@@ -100,7 +98,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     if (!controls) return;
 
     if (isActive && object) {
-      console.log('Attaching object to transform controls:', object.name || object.type, object);
+      console.log('Attaching object to transform controls:', object.name || object.type);
       
       try {
         // Desadjuntar cualquier objeto previo
@@ -108,21 +106,15 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
           controls.detach();
         }
 
-        // Preparar el objeto para transformaciones
+        // Asegurar que el objeto permite transformaciones
         object.matrixAutoUpdate = true;
-        
-        // Para nubes de puntos, asegurar que tengan una matriz válida
-        if (object instanceof THREE.Points) {
-          object.updateMatrix();
-          object.updateMatrixWorld(true);
-        }
         
         // Adjuntar el nuevo objeto
         controls.attach(object);
         
         // Configurar modo y propiedades
         controls.setMode(mode);
-        controls.setSize(2); // Controles más grandes para mejor visibilidad
+        controls.setSize(1.5); // Hacer los controles más grandes para mejor interacción
         
         // Habilitar todos los ejes
         controls.showX = true;
@@ -132,7 +124,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
         // Configurar espacio de transformación
         controls.space = 'world';
         
-        // Configurar snapping según el modo
+        // Configurar snapping
         if (mode === 'translate') {
           controls.setTranslationSnap(0.1);
           controls.setRotationSnap(null);
@@ -141,39 +133,28 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
           controls.setRotationSnap(THREE.MathUtils.degToRad(15));
         }
         
-        // CRÍTICO: Configurar eventos y propiedades
+        // CRÍTICO: Configurar eventos de manera más agresiva
         controls.enabled = true;
         controls.domElement = gl.domElement;
         
-        // Marcar controles para identificación
+        // Marcar objetos de controles para identificación
         controls.traverse((child: THREE.Object3D) => {
           child.userData.isTransformControl = true;
-          
-          // Mejorar interacción con raycast personalizado
+          // Hacer los controles más sensibles al click
           if (child instanceof THREE.Mesh) {
-            const originalRaycast = child.raycast.bind(child);
             child.raycast = function(raycaster: THREE.Raycaster, intersects: THREE.Intersection[]) {
-              // Aumentar tolerancia para mejor detección
+              // Llamar al raycast original pero con mayor tolerancia
               const originalThreshold = raycaster.params.Points?.threshold || 0;
-              const originalLineThreshold = raycaster.params.Line?.threshold || 0;
-              
-              raycaster.params.Points = { threshold: 0.3 };
-              raycaster.params.Line = { threshold: 0.3 };
-              
-              originalRaycast(raycaster, intersects);
-              
-              // Restaurar valores originales
+              raycaster.params.Points = { threshold: 0.1 };
+              THREE.Mesh.prototype.raycast.call(this, raycaster, intersects);
               raycaster.params.Points = { threshold: originalThreshold };
-              raycaster.params.Line = { threshold: originalLineThreshold };
             };
           }
         });
-        
         controls.userData.isTransformControl = true;
         
         console.log('Transform Controls configured successfully');
         console.log('- Mode:', mode);
-        console.log('- Object type:', object.type);
         console.log('- Object attached:', !!controls.object);
         console.log('- Controls enabled:', controls.enabled);
         
@@ -204,14 +185,14 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       mode={mode}
       camera={camera}
       domElement={gl.domElement}
-      size={2}
+      size={1.5}
       showX={true}
       showY={true}
       showZ={true}
       space="world"
       enabled={true}
       userData={{ isTransformControl: true }}
-      // Captura de eventos mejorada
+      // Mejorar captura de eventos
       onPointerDown={(e) => {
         console.log('Transform controls pointer down - stopping propagation');
         e.stopPropagation();
@@ -229,7 +210,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
         e.stopPropagation();
         e.nativeEvent?.stopImmediatePropagation();
       }}
-      // Configuraciones de snapping
+      // Configuraciones adicionales para mejorar la respuesta
       translationSnap={mode === 'translate' ? 0.1 : null}
       rotationSnap={mode === 'rotate' ? THREE.MathUtils.degToRad(15) : null}
     />

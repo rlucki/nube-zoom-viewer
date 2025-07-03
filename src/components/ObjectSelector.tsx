@@ -24,50 +24,37 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   const getSelectableObjects = (): THREE.Object3D[] => {
     const objects: THREE.Object3D[] = [];
     scene.traverse((child) => {
-      // Incluir tanto Points (nubes de puntos) como Mesh (modelos IFC)
       if (
-        ((child instanceof THREE.Mesh && child.geometry && child.material) ||
-         (child instanceof THREE.Points && child.geometry && child.material)) &&
+        (child instanceof THREE.Mesh && child.geometry && child.material) &&
         !child.userData.isSectionBox &&
         !child.userData.isUI &&
         !child.userData.isTransformControl &&
         !child.name.includes('helper') &&
         !child.name.includes('grid') &&
         !child.name.includes('control') &&
-        !child.name.includes('gizmo') &&
         child.visible &&
         child.parent !== scene
       ) {
         objects.push(child);
       }
     });
-    console.log('Selectable objects found:', objects.length, objects.map(o => o.type));
     return objects;
   };
 
   const restoreOriginalMaterial = (obj: THREE.Object3D) => {
     if (originalMaterials.current.has(obj)) {
       const originalMat = originalMaterials.current.get(obj);
-      if (originalMat) {
-        if (obj instanceof THREE.Mesh) {
-          obj.material = originalMat;
-          obj.material.needsUpdate = true;
-        } else if (obj instanceof THREE.Points) {
-          obj.material = originalMat;
-          obj.material.needsUpdate = true;
-        }
+      if (originalMat && obj instanceof THREE.Mesh) {
+        obj.material = originalMat;
+        obj.material.needsUpdate = true;
       }
       originalMaterials.current.delete(obj);
     }
   };
 
   const setHoverMaterial = (obj: THREE.Object3D) => {
-    if (!originalMaterials.current.has(obj)) {
-      if (obj instanceof THREE.Mesh) {
-        originalMaterials.current.set(obj, obj.material);
-      } else if (obj instanceof THREE.Points) {
-        originalMaterials.current.set(obj, obj.material);
-      }
+    if (!originalMaterials.current.has(obj) && obj instanceof THREE.Mesh) {
+      originalMaterials.current.set(obj, obj.material);
     }
     
     if (obj instanceof THREE.Mesh) {
@@ -78,15 +65,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         emissive: 0x004488,
         emissiveIntensity: 0.2,
       });
-      obj.material = hoverMaterial;
-      obj.material.needsUpdate = true;
-    } else if (obj instanceof THREE.Points) {
-      const hoverMaterial = new THREE.PointsMaterial({
-        color: 0x88ccff,
-        size: 4,
-        transparent: true,
-        opacity: 0.8,
-      });
+      
       obj.material = hoverMaterial;
       obj.material.needsUpdate = true;
     }
@@ -101,21 +80,13 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         emissive: 0x664400,
         emissiveIntensity: 0.3,
       });
-      obj.material = selectMaterial;
-      obj.material.needsUpdate = true;
-    } else if (obj instanceof THREE.Points) {
-      const selectMaterial = new THREE.PointsMaterial({
-        color: 0xffaa00,
-        size: 5,
-        transparent: true,
-        opacity: 0.9,
-      });
+      
       obj.material = selectMaterial;
       obj.material.needsUpdate = true;
     }
   };
 
-  // Mejorar detección de controles de transformación
+  // Función mejorada para detectar controles de transformación
   const isTransformControlClick = (event: MouseEvent): boolean => {
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
@@ -125,7 +96,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 
     raycaster.current.setFromCamera(mouse, camera);
     
-    // Buscar objetos de transform controls
+    // Buscar objetos de transform controls con mayor tolerancia
     const transformObjects: THREE.Object3D[] = [];
     scene.traverse((child) => {
       if (
@@ -134,32 +105,29 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         child.name.includes('gizmo') ||
         child.name.includes('picker') ||
         child.name.includes('helper') ||
-        child.name.includes('rotationAxis') ||
-        child.name.includes('translationAxis') ||
-        (child.parent && (
-          child.parent.userData.isTransformControl ||
-          child.parent.name.includes('TransformControls')
-        ))
+        (child.parent && child.parent.userData.isTransformControl)
       ) {
         transformObjects.push(child);
       }
     });
 
     if (transformObjects.length > 0) {
-      // Configurar raycaster con tolerancia alta
-      const originalPointsThreshold = raycaster.current.params.Points?.threshold || 0;
-      const originalLineThreshold = raycaster.current.params.Line?.threshold || 0;
-      
-      raycaster.current.params.Points = { threshold: 0.3 };
-      raycaster.current.params.Line = { threshold: 0.3 };
+      // Configurar raycaster con mayor tolerancia para controles
+      const originalThreshold = raycaster.current.params.Points?.threshold || 0;
+      raycaster.current.params.Points = { threshold: 0.2 };
+      raycaster.current.params.Line = { threshold: 0.2 };
       
       const intersects = raycaster.current.intersectObjects(transformObjects, true);
       
-      // Restaurar thresholds originales
-      raycaster.current.params.Points = { threshold: originalPointsThreshold };
-      raycaster.current.params.Line = { threshold: originalLineThreshold };
+      // Restaurar threshold original
+      raycaster.current.params.Points = { threshold: originalThreshold };
+      raycaster.current.params.Line = { threshold: originalThreshold };
       
-      return intersects.length > 0;
+      const hasIntersection = intersects.length > 0;
+      if (hasIntersection) {
+        console.log('Transform control detected at mouse position');
+      }
+      return hasIntersection;
     }
 
     return false;
@@ -186,15 +154,10 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     );
 
     raycaster.current.setFromCamera(mouse, camera);
-    
-    // Configurar raycaster para nubes de puntos
-    raycaster.current.params.Points = { threshold: 0.1 };
-    
     const intersects = raycaster.current.intersectObjects(getSelectableObjects(), false);
 
     if (intersects.length > 0) {
       const targetObject = intersects[0].object;
-      console.log('Object hovered:', targetObject.type, targetObject.name);
 
       if (targetObject !== hovered) {
         if (hovered && hovered !== selected) {
@@ -225,9 +188,10 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     // CRÍTICO: No interceptar clicks en controles de transformación
     if (isTransformControlClick(event)) {
       console.log('Click on transform controls detected - allowing event to pass through');
-      return;
+      return; // NO hacer stopPropagation aquí
     }
 
+    // Solo prevenir propagación si NO es en controles de transformación
     event.stopPropagation();
 
     if (hovered) {
@@ -240,7 +204,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
       onObjectSelect?.(hovered);
       gl.domElement.style.cursor = 'default';
       
-      console.log('Selected object:', hovered.name || hovered.type, hovered);
+      console.log('Selected object:', hovered.name || hovered.type);
     } else {
       if (selected) {
         restoreOriginalMaterial(selected);
@@ -253,7 +217,9 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   useEffect(() => {
     if (isActive && !isDragging) {
       const canvas = gl.domElement;
+      // Usar passive: false para poder prevenir eventos cuando sea necesario
       canvas.addEventListener('mousemove', handleMouseMove, { passive: false });
+      // Usar capture: false para permitir que los controles manejen eventos primero
       canvas.addEventListener('click', handleClick, { capture: false, passive: false });
 
       return () => {
