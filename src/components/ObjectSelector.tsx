@@ -24,95 +24,88 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   const getSelectableObjects = (): THREE.Object3D[] => {
     const objects: THREE.Object3D[] = [];
     scene.traverse((child) => {
-      // Incluir tanto Points (nubes de puntos) como Mesh (modelos IFC)
       if (
-        ((child instanceof THREE.Mesh && child.geometry && child.material) ||
-         (child instanceof THREE.Points && child.geometry && child.material)) &&
+        child.userData?.sourceId &&
         !child.userData.isSectionBox &&
         !child.userData.isUI &&
         !child.userData.isTransformControl &&
-        !child.name.includes('helper') &&
-        !child.name.includes('grid') &&
-        !child.name.includes('control') &&
-        !child.name.includes('gizmo') &&
-        child.visible &&
-        child.parent !== scene
+        child.visible
       ) {
         objects.push(child);
       }
     });
-    console.log('Selectable objects found:', objects.length, objects.map(o => o.type));
     return objects;
   };
 
   const restoreOriginalMaterial = (obj: THREE.Object3D) => {
-    if (originalMaterials.current.has(obj)) {
-      const originalMat = originalMaterials.current.get(obj);
-      if (originalMat) {
-        if (obj instanceof THREE.Mesh) {
-          obj.material = originalMat;
-          obj.material.needsUpdate = true;
-        } else if (obj instanceof THREE.Points) {
-          obj.material = originalMat;
-          obj.material.needsUpdate = true;
+    obj.traverse((child) => {
+      if (originalMaterials.current.has(child)) {
+        const originalMat = originalMaterials.current.get(child);
+        if (originalMat) {
+          if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+            (child as any).material = originalMat;
+            (child as any).material.needsUpdate = true;
+          }
         }
+        originalMaterials.current.delete(child);
       }
-      originalMaterials.current.delete(obj);
-    }
+    });
   };
 
   const setHoverMaterial = (obj: THREE.Object3D) => {
-    if (!originalMaterials.current.has(obj)) {
-      if (obj instanceof THREE.Mesh) {
-        originalMaterials.current.set(obj, obj.material);
-      } else if (obj instanceof THREE.Points) {
-        originalMaterials.current.set(obj, obj.material);
+    obj.traverse((child) => {
+      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+        if (!originalMaterials.current.has(child)) {
+          originalMaterials.current.set(child, (child as any).material);
+        }
+
+        if (child instanceof THREE.Mesh) {
+          const hoverMaterial = new THREE.MeshStandardMaterial({
+            color: 0x88ccff,
+            transparent: true,
+            opacity: 0.7,
+            emissive: 0x004488,
+            emissiveIntensity: 0.2,
+          });
+          child.material = hoverMaterial;
+          child.material.needsUpdate = true;
+        } else if (child instanceof THREE.Points) {
+          const hoverMaterial = new THREE.PointsMaterial({
+            color: 0x88ccff,
+            size: 4,
+            transparent: true,
+            opacity: 0.8,
+          });
+          child.material = hoverMaterial;
+          child.material.needsUpdate = true;
+        }
       }
-    }
-    
-    if (obj instanceof THREE.Mesh) {
-      const hoverMaterial = new THREE.MeshStandardMaterial({
-        color: 0x88ccff,
-        transparent: true,
-        opacity: 0.7,
-        emissive: 0x004488,
-        emissiveIntensity: 0.2,
-      });
-      obj.material = hoverMaterial;
-      obj.material.needsUpdate = true;
-    } else if (obj instanceof THREE.Points) {
-      const hoverMaterial = new THREE.PointsMaterial({
-        color: 0x88ccff,
-        size: 4,
-        transparent: true,
-        opacity: 0.8,
-      });
-      obj.material = hoverMaterial;
-      obj.material.needsUpdate = true;
-    }
+    });
   };
 
   const setSelectMaterial = (obj: THREE.Object3D) => {
-    if (obj instanceof THREE.Mesh) {
-      const selectMaterial = new THREE.MeshStandardMaterial({
-        color: 0xffaa00,
-        transparent: true,
-        opacity: 0.8,
-        emissive: 0x664400,
-        emissiveIntensity: 0.3,
-      });
-      obj.material = selectMaterial;
-      obj.material.needsUpdate = true;
-    } else if (obj instanceof THREE.Points) {
-      const selectMaterial = new THREE.PointsMaterial({
-        color: 0xffaa00,
-        size: 5,
-        transparent: true,
-        opacity: 0.9,
-      });
-      obj.material = selectMaterial;
-      obj.material.needsUpdate = true;
-    }
+    obj.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        const selectMaterial = new THREE.MeshStandardMaterial({
+          color: 0xffaa00,
+          transparent: true,
+          opacity: 0.8,
+          emissive: 0x664400,
+          emissiveIntensity: 0.3,
+        });
+        child.material = selectMaterial;
+        child.material.needsUpdate = true;
+      } else if (child instanceof THREE.Points) {
+        const selectMaterial = new THREE.PointsMaterial({
+          color: 0xffaa00,
+          size: 5,
+          transparent: true,
+          opacity: 0.9,
+        });
+        child.material = selectMaterial;
+        child.material.needsUpdate = true;
+      }
+    });
   };
 
   // Mejorar detección de controles de transformación
@@ -190,10 +183,13 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     // Configurar raycaster para nubes de puntos
     raycaster.current.params.Points = { threshold: 0.1 };
     
-    const intersects = raycaster.current.intersectObjects(getSelectableObjects(), false);
+    const intersects = raycaster.current.intersectObjects(getSelectableObjects(), true);
 
     if (intersects.length > 0) {
-      const targetObject = intersects[0].object;
+      let targetObject = intersects[0].object as THREE.Object3D;
+      while (targetObject && !targetObject.userData?.sourceId && targetObject.parent) {
+        targetObject = targetObject.parent;
+      }
       console.log('Object hovered:', targetObject.type, targetObject.name);
 
       if (targetObject !== hovered) {
