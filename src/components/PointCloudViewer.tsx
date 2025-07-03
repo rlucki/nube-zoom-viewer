@@ -394,35 +394,48 @@ export const PointCloudViewer: React.FC = () => {
   }, []);
 
   // Manejar arrastre de transformación - CORREGIDO
-  const handleTransformDragChange = useCallback((dragging: boolean) => {
-    console.log('Transform dragging changed:', dragging);
-    setIsTransformDragging(dragging);
-    
-    // Deshabilitar controles de cámara durante transformaciones
-    setCameraControlsEnabled(!dragging);
-    
-    // Actualizar controles directamente
-    if (controlsRef.current) {
-      controlsRef.current.enabled = !dragging;
-      if (dragging) {
-        // Desactivar completamente los controles durante el arrastre
-        controlsRef.current.enablePan = false;
-        controlsRef.current.enableZoom = false;
-        controlsRef.current.enableRotate = false;
-      } else {
-        // Reactivar controles después del arrastre
-        controlsRef.current.enablePan = true;
-        controlsRef.current.enableZoom = true;
-        controlsRef.current.enableRotate = true;
+  const handleTransformDragChange = useCallback(
+    (dragging: boolean) => {
+      console.log('Transform dragging changed:', dragging);
+      setIsTransformDragging(dragging);
+
+      // Deshabilitar controles de cámara durante transformaciones
+      updateCameraControls(!dragging);
+
+      // Actualizar controles directamente
+      if (controlsRef.current) {
+        controlsRef.current.enabled = !dragging;
+        if (dragging) {
+          // Desactivar completamente los controles durante el arrastre
+          controlsRef.current.enablePan = false;
+          controlsRef.current.enableZoom = false;
+          controlsRef.current.enableRotate = false;
+        } else {
+          // Reactivar controles después del arrastre
+          controlsRef.current.enablePan = true;
+          controlsRef.current.enableZoom = true;
+          controlsRef.current.enableRotate = true;
+        }
       }
-    }
-    
-    if (dragging) {
-      startDrag('transform');
+
+      if (dragging) {
+        startDrag('transform');
+      } else {
+        endDrag();
+      }
+    },
+    [startDrag, endDrag, updateCameraControls],
+  );
+
+  // Deshabilitar controles de cámara cuando hay un objeto seleccionado para transformar
+  useEffect(() => {
+    if (isTransformDragging) return;
+    if (transformActive && selectedObject) {
+      updateCameraControls(false);
     } else {
-      endDrag();
+      updateCameraControls(true);
     }
-  }, [startDrag, endDrag]);
+  }, [transformActive, selectedObject, isTransformDragging, updateCameraControls]);
 
   /* -------------------------------------------------------------------------- */
   /*  Escena interna (luces, modelos, etc.)                                     */
@@ -535,10 +548,10 @@ export const PointCloudViewer: React.FC = () => {
           {/* Controles de cámara - MEJORADOS */}
           <OrbitControls
             ref={controlsRef}
-            enablePan={!isTransformDragging}
-            enableZoom={!isTransformDragging}
-            enableRotate={!isTransformDragging}
-            enabled={!isTransformDragging}
+            enablePan={cameraControlsEnabled}
+            enableZoom={cameraControlsEnabled}
+            enableRotate={cameraControlsEnabled}
+            enabled={cameraControlsEnabled}
             zoomSpeed={0.6}
             panSpeed={0.8}
             rotateSpeed={0.4}
