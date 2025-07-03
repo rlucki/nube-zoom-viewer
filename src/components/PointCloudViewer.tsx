@@ -386,18 +386,19 @@ export const PointCloudViewer: React.FC = () => {
 
   /* -------------------- Mejorar control de cámara -------------------------- */
   const updateCameraControls = useCallback((enabled: boolean) => {
+    console.log('Updating camera controls enabled:', enabled);
     setCameraControlsEnabled(enabled);
     if (controlsRef.current) {
       controlsRef.current.enabled = enabled;
     }
   }, []);
 
-  // Manejar arrastre de transformación
+  // Manejar arrastre de transformación - MEJORADO
   const handleTransformDragChange = useCallback((dragging: boolean) => {
     console.log('Transform dragging changed:', dragging);
     setIsTransformDragging(dragging);
     
-    // Desactivar controles de cámara durante el arrastre de transformación
+    // Deshabilitar completamente los controles de cámara durante transformaciones
     updateCameraControls(!dragging);
     
     if (dragging) {
@@ -490,9 +491,9 @@ export const PointCloudViewer: React.FC = () => {
             />
           </group>
 
-          {/* Selector de objetos (solo para Transformación) */}
+          {/* Selector de objetos - SOLO activo cuando no hay objeto seleccionado */}
           <ObjectSelector
-            isActive={transformActive && !isTransformDragging}
+            isActive={transformActive && selectedObject === null && !isTransformDragging}
             isDragging={isTransformDragging}
             onObjectHover={() => {}}
             onObjectSelect={handleObjectSelection}
@@ -501,7 +502,7 @@ export const PointCloudViewer: React.FC = () => {
           {/* Manipulador de transformación */}
           <TransformManipulator
             object={selectedObject}
-            isActive={transformActive}
+            isActive={transformActive && selectedObject !== null}
             mode={transformMode}
             onDraggingChange={handleTransformDragChange}
           />
@@ -515,16 +516,17 @@ export const PointCloudViewer: React.FC = () => {
             onSnapModeChange={setSnapMode}
           />
 
-          {/* Controles de cámara - completamente deshabilitados durante transformaciones */}
+          {/* Controles de cámara - COMPLETAMENTE deshabilitados durante transformaciones */}
           <OrbitControls
             ref={controlsRef}
-            enablePan={cameraControlsEnabled && !transformActive}
-            enableZoom={cameraControlsEnabled && !transformActive}
-            enableRotate={cameraControlsEnabled && !transformActive}
-            enabled={cameraControlsEnabled && !transformActive}
+            enablePan={cameraControlsEnabled && !isTransformDragging}
+            enableZoom={cameraControlsEnabled && !isTransformDragging}
+            enableRotate={cameraControlsEnabled && !isTransformDragging}
+            enabled={cameraControlsEnabled && !isTransformDragging}
             zoomSpeed={0.6}
             panSpeed={0.8}
             rotateSpeed={0.4}
+            makeDefault
           />
 
           {/* Stats */}

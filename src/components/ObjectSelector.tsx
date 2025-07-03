@@ -26,7 +26,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     const objects: THREE.Object3D[] = [];
     scene.traverse((child) => {
       if (
-        (child instanceof THREE.Mesh || child instanceof THREE.Points || child instanceof THREE.Group) &&
+        (child instanceof THREE.Mesh && child.geometry && child.material) &&
         !child.userData.isSectionBox &&
         !child.userData.isUI &&
         !child.userData.isTransformControl &&
@@ -34,7 +34,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         !child.name.includes('grid') &&
         !child.name.includes('control') &&
         child.visible &&
-        child.parent !== scene // Evitar seleccionar objetos directos de la escena
+        child.parent !== scene // Evitar objetos directos de la escena
       ) {
         objects.push(child);
       }
@@ -45,66 +45,53 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 
   const restoreOriginalMaterial = (obj: THREE.Object3D) => {
     if (originalMaterials.current.has(obj)) {
-      obj.traverse((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-          const originalMat = originalMaterials.current.get(obj);
-          if (originalMat) {
-            child.material = originalMat;
-          }
-        }
-      });
+      const originalMat = originalMaterials.current.get(obj);
+      if (originalMat && obj instanceof THREE.Mesh) {
+        obj.material = originalMat;
+        obj.material.needsUpdate = true;
+      }
       originalMaterials.current.delete(obj);
     }
   };
 
   const setHoverMaterial = (obj: THREE.Object3D) => {
-    if (!originalMaterials.current.has(obj)) {
+    if (!originalMaterials.current.has(obj) && obj instanceof THREE.Mesh) {
       // Guardar material original
-      let originalMaterial = null;
-      obj.traverse((child) => {
-        if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && !originalMaterial) {
-          originalMaterial = child.material;
-        }
-      });
-      if (originalMaterial) {
-        originalMaterials.current.set(obj, originalMaterial);
-      }
+      originalMaterials.current.set(obj, obj.material);
     }
     
-    // Aplicar material de hover a todos los meshes del objeto
-    const hoverMaterial = new THREE.MeshStandardMaterial({
-      color: 0x88ccff,
-      transparent: true,
-      opacity: 0.8,
-      emissive: 0x002244,
-      emissiveIntensity: 0.3,
-    });
-    
-    obj.traverse((child) => {
-      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-        child.material = hoverMaterial;
-      }
-    });
+    // Aplicar material de hover
+    if (obj instanceof THREE.Mesh) {
+      const hoverMaterial = new THREE.MeshStandardMaterial({
+        color: 0x88ccff,
+        transparent: true,
+        opacity: 0.7,
+        emissive: 0x004488,
+        emissiveIntensity: 0.2,
+      });
+      
+      obj.material = hoverMaterial;
+      obj.material.needsUpdate = true;
+    }
   };
 
   const setSelectMaterial = (obj: THREE.Object3D) => {
-    const selectMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffaa44,
-      transparent: true,
-      opacity: 0.9,
-      emissive: 0x441100,
-      emissiveIntensity: 0.5,
-    });
-    
-    obj.traverse((child) => {
-      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-        child.material = selectMaterial;
-      }
-    });
+    if (obj instanceof THREE.Mesh) {
+      const selectMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffaa00,
+        transparent: true,
+        opacity: 0.8,
+        emissive: 0x664400,
+        emissiveIntensity: 0.3,
+      });
+      
+      obj.material = selectMaterial;
+      obj.material.needsUpdate = true;
+    }
   };
 
   const findBestParent = (obj: THREE.Object3D): THREE.Object3D => {
-    // Buscar el mejor padre para seleccionar (Group o el objeto más alto significativo)
+    // Para IFC y modelos complejos, buscar el grupo padre más significativo
     let current = obj;
     let bestParent = obj;
     
@@ -128,10 +115,10 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     );
 
     raycaster.current.setFromCamera(mouse, camera);
-    const intersects = raycaster.current.intersectObjects(getSelectableObjects(), true);
+    const intersects = raycaster.current.intersectObjects(getSelectableObjects(), false);
 
     if (intersects.length > 0) {
-      const targetObject = findBestParent(intersects[0].object);
+      const targetObject = intersects[0].object;
 
       if (targetObject !== hovered) {
         // Restaurar material anterior
@@ -148,7 +135,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         onObjectHover?.(targetObject);
         gl.domElement.style.cursor = 'pointer';
         
-        console.log('Hovering object:', targetObject.name || targetObject.type, targetObject);
+        console.log('Hovering object:', targetObject.name || targetObject.type);
       }
     } else {
       if (hovered && hovered !== selected) {
@@ -160,8 +147,11 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     }
   };
 
-  const handleClick = () => {
+  const handleClick = (event: MouseEvent) => {
     if (!isActive || isDragging) return;
+
+    // Prevenir que el evento se propague a los controles de cámara
+    event.stopPropagation();
 
     if (hovered) {
       // Restaurar material del objeto previamente seleccionado
@@ -174,7 +164,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
       onObjectSelect?.(hovered);
       gl.domElement.style.cursor = 'default';
       
-      console.log('Selected object:', hovered.name || hovered.type, hovered);
+      console.log('Selected object:', hovered.name || hovered.type);
     } else {
       // Deseleccionar si se hace clic en el vacío
       if (selected) {
@@ -188,12 +178,12 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   useEffect(() => {
     if (isActive && !isDragging) {
       const canvas = gl.domElement;
-      canvas.addEventListener('mousemove', handleMouseMove);
-      canvas.addEventListener('click', handleClick);
+      canvas.addEventListener('mousemove', handleMouseMove, { passive: true });
+      canvas.addEventListener('click', handleClick, { capture: true });
 
       return () => {
         canvas.removeEventListener('mousemove', handleMouseMove);
-        canvas.removeEventListener('click', handleClick);
+        canvas.removeEventListener('click', handleClick, { capture: true });
       };
     }
   }, [isActive, isDragging, hovered, selected]);
