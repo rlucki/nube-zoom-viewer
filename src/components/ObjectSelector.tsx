@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
@@ -34,7 +33,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         !child.name.includes('grid') &&
         !child.name.includes('control') &&
         child.visible &&
-        child.parent !== scene // Evitar objetos directos de la escena
+        child.parent !== scene
       ) {
         objects.push(child);
       }
@@ -55,11 +54,9 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 
   const setHoverMaterial = (obj: THREE.Object3D) => {
     if (!originalMaterials.current.has(obj) && obj instanceof THREE.Mesh) {
-      // Guardar material original
       originalMaterials.current.set(obj, obj.material);
     }
     
-    // Aplicar material de hover
     if (obj instanceof THREE.Mesh) {
       const hoverMaterial = new THREE.MeshStandardMaterial({
         color: 0x88ccff,
@@ -89,7 +86,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     }
   };
 
-  // Nueva función para detectar si el click es en controles de transformación
+  // Función mejorada para detectar controles de transformación
   const isTransformControlClick = (event: MouseEvent): boolean => {
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
@@ -99,12 +96,15 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 
     raycaster.current.setFromCamera(mouse, camera);
     
-    // Buscar objetos de transform controls
+    // Buscar objetos de transform controls con mayor tolerancia
     const transformObjects: THREE.Object3D[] = [];
     scene.traverse((child) => {
       if (
         child.userData.isTransformControl ||
         child.name.includes('TransformControls') ||
+        child.name.includes('gizmo') ||
+        child.name.includes('picker') ||
+        child.name.includes('helper') ||
         (child.parent && child.parent.userData.isTransformControl)
       ) {
         transformObjects.push(child);
@@ -112,8 +112,22 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     });
 
     if (transformObjects.length > 0) {
+      // Configurar raycaster con mayor tolerancia para controles
+      const originalThreshold = raycaster.current.params.Points?.threshold || 0;
+      raycaster.current.params.Points = { threshold: 0.2 };
+      raycaster.current.params.Line = { threshold: 0.2 };
+      
       const intersects = raycaster.current.intersectObjects(transformObjects, true);
-      return intersects.length > 0;
+      
+      // Restaurar threshold original
+      raycaster.current.params.Points = { threshold: originalThreshold };
+      raycaster.current.params.Line = { threshold: originalThreshold };
+      
+      const hasIntersection = intersects.length > 0;
+      if (hasIntersection) {
+        console.log('Transform control detected at mouse position');
+      }
+      return hasIntersection;
     }
 
     return false;
@@ -124,7 +138,6 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 
     // No hacer hover si estamos sobre controles de transformación
     if (isTransformControlClick(event)) {
-      // Restaurar material anterior si había hover
       if (hovered && hovered !== selected) {
         restoreOriginalMaterial(hovered);
       }
@@ -147,12 +160,10 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
       const targetObject = intersects[0].object;
 
       if (targetObject !== hovered) {
-        // Restaurar material anterior
         if (hovered && hovered !== selected) {
           restoreOriginalMaterial(hovered);
         }
         
-        // Aplicar hover solo si no está seleccionado
         if (targetObject !== selected) {
           setHoverMaterial(targetObject);
         }
@@ -176,15 +187,14 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 
     // CRÍTICO: No interceptar clicks en controles de transformación
     if (isTransformControlClick(event)) {
-      console.log('Click intercepted on transform controls - allowing it to pass through');
-      return; // Permitir que el evento llegue a los controles
+      console.log('Click on transform controls detected - allowing event to pass through');
+      return; // NO hacer stopPropagation aquí
     }
 
-    // Prevenir que el evento se propague solo si NO es en controles de transformación
+    // Solo prevenir propagación si NO es en controles de transformación
     event.stopPropagation();
 
     if (hovered) {
-      // Restaurar material del objeto previamente seleccionado
       if (selected && selected !== hovered) {
         restoreOriginalMaterial(selected);
       }
@@ -196,7 +206,6 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
       
       console.log('Selected object:', hovered.name || hovered.type);
     } else {
-      // Deseleccionar si se hace clic en el vacío
       if (selected) {
         restoreOriginalMaterial(selected);
         setSelected(null);
@@ -208,13 +217,14 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   useEffect(() => {
     if (isActive && !isDragging) {
       const canvas = gl.domElement;
-      canvas.addEventListener('mousemove', handleMouseMove, { passive: true });
-      // Cambiar a capture: false para permitir que los controles intercepten primero
-      canvas.addEventListener('click', handleClick, { capture: false });
+      // Usar passive: false para poder prevenir eventos cuando sea necesario
+      canvas.addEventListener('mousemove', handleMouseMove, { passive: false });
+      // Usar capture: false para permitir que los controles manejen eventos primero
+      canvas.addEventListener('click', handleClick, { capture: false, passive: false });
 
       return () => {
         canvas.removeEventListener('mousemove', handleMouseMove);
-        canvas.removeEventListener('click', handleClick, { capture: false });
+        canvas.removeEventListener('click', handleClick);
       };
     }
   }, [isActive, isDragging, hovered, selected]);

@@ -52,8 +52,9 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
     };
 
-    // Eventos de TransformControls
+    // Eventos de TransformControls - MEJORADOS
     const onDraggingChanged = (event: any) => {
+      console.log('Dragging changed event:', event.value);
       if (event.value) {
         handleDragStart();
       } else {
@@ -61,14 +62,29 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
     };
 
+    // Eventos adicionales para capturar interacciones
+    const onMouseDown = (event: any) => {
+      console.log('Transform controls mouse down');
+      event.stopPropagation();
+    };
+
+    const onMouseUp = (event: any) => {
+      console.log('Transform controls mouse up');
+      event.stopPropagation();
+    };
+
     controls.addEventListener('dragging-changed', onDraggingChanged);
     controls.addEventListener('objectChange', handleObjectChange);
+    controls.addEventListener('mouseDown', onMouseDown);
+    controls.addEventListener('mouseUp', onMouseUp);
     
     return () => {
       if (controls) {
         try {
           controls.removeEventListener('dragging-changed', onDraggingChanged);
           controls.removeEventListener('objectChange', handleObjectChange);
+          controls.removeEventListener('mouseDown', onMouseDown);
+          controls.removeEventListener('mouseUp', onMouseUp);
         } catch (error) {
           console.warn('Error removing event listeners:', error);
         }
@@ -98,7 +114,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
         
         // Configurar modo y propiedades
         controls.setMode(mode);
-        controls.setSize(1.2); // Hacer los controles un poco más grandes
+        controls.setSize(1.5); // Hacer los controles más grandes para mejor interacción
         
         // Habilitar todos los ejes
         controls.showX = true;
@@ -117,12 +133,23 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
           controls.setRotationSnap(THREE.MathUtils.degToRad(15));
         }
         
-        // CRÍTICO: Asegurar que los controles están habilitados y pueden interceptar eventos
+        // CRÍTICO: Configurar eventos de manera más agresiva
         controls.enabled = true;
+        controls.domElement = gl.domElement;
         
         // Marcar objetos de controles para identificación
         controls.traverse((child: THREE.Object3D) => {
           child.userData.isTransformControl = true;
+          // Hacer los controles más sensibles al click
+          if (child instanceof THREE.Mesh) {
+            child.raycast = function(raycaster: THREE.Raycaster, intersects: THREE.Intersection[]) {
+              // Llamar al raycast original pero con mayor tolerancia
+              const originalThreshold = raycaster.params.Points?.threshold || 0;
+              raycaster.params.Points = { threshold: 0.1 };
+              THREE.Mesh.prototype.raycast.call(this, raycaster, intersects);
+              raycaster.params.Points = { threshold: originalThreshold };
+            };
+          }
         });
         controls.userData.isTransformControl = true;
         
@@ -145,7 +172,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
         }
       }
     }
-  }, [object, isActive, mode]);
+  }, [object, isActive, mode, gl]);
 
   // No renderizar si no está activo o no hay objeto
   if (!isActive || !object) {
@@ -158,23 +185,34 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       mode={mode}
       camera={camera}
       domElement={gl.domElement}
-      size={1.2}
+      size={1.5}
       showX={true}
       showY={true}
       showZ={true}
       space="world"
-      enabled={true} // Siempre habilitado cuando está activo
+      enabled={true}
       userData={{ isTransformControl: true }}
-      // Asegurar que los controles tienen prioridad en los eventos
+      // Mejorar captura de eventos
       onPointerDown={(e) => {
-        console.log('Transform controls pointer down');
+        console.log('Transform controls pointer down - stopping propagation');
         e.stopPropagation();
+        e.nativeEvent?.stopImmediatePropagation();
       }}
       onPointerMove={(e) => {
         if (isDragging) {
+          console.log('Transform controls pointer move during drag');
           e.stopPropagation();
+          e.nativeEvent?.stopImmediatePropagation();
         }
       }}
+      onPointerUp={(e) => {
+        console.log('Transform controls pointer up');
+        e.stopPropagation();
+        e.nativeEvent?.stopImmediatePropagation();
+      }}
+      // Configuraciones adicionales para mejorar la respuesta
+      translationSnap={mode === 'translate' ? 0.1 : null}
+      rotationSnap={mode === 'rotate' ? THREE.MathUtils.degToRad(15) : null}
     />
   );
 };
