@@ -14,16 +14,12 @@ interface PointCloudProps {
   pointSize: number;
   /** Modo de coloreado: 'rgb', 'intensity' o 'height'. */
   colorMode: 'rgb' | 'intensity' | 'height';
-  name?: string;
-  userData?: Record<string, any>;
 }
 
 export const PointCloud: React.FC<PointCloudProps> = ({
   points,
   pointSize,
   colorMode,
-  name,
-  userData,
 }) => {
   /** Referencia al objeto THREE.Points para futuras manipulaciones. */
   const meshRef = useRef<THREE.Points>(null);
@@ -57,8 +53,6 @@ export const PointCloud: React.FC<PointCloudProps> = ({
       geometry={geometry}
       material={material}
       frustumCulled={false}  // evita que Three.js lo descarte si boundingSphere falla
-      name={name || 'PointCloud'}
-      userData={userData}
     />
   );
 };

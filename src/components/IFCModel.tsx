@@ -10,8 +10,6 @@ interface IFCModelProps {
   geometry: IFCGeometry;
   /** Desired opacity (1 = fully opaque, 0 = fully transparent). */
   transparency: number;
-  name?: string;
-  userData?: Record<string, any>;
 }
 
 /**
@@ -21,8 +19,6 @@ interface IFCModelProps {
 export const IFCModel: React.FC<IFCModelProps> = ({
   geometry,
   transparency,
-  name,
-  userData,
 }) => {
   /** <group> that will hold every mesh clone. */
   const groupRef  = useRef<THREE.Group>(null);
@@ -68,5 +64,5 @@ export const IFCModel: React.FC<IFCModelProps> = ({
   }, [transparency]);
 
   /* ---------- 5. Render only the group (meshes are inside). ---------- */
-  return <group ref={groupRef} name={name} userData={userData} />;
+  return <group ref={groupRef} />;
 };
