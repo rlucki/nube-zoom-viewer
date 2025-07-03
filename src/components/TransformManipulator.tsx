@@ -21,24 +21,19 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
   const { camera, gl } = useThree();
   const [isDragging, setIsDragging] = useState(false);
 
-  // Manejar eventos de arrastre
+  // Configurar eventos de arrastre
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
 
-    const handleDragStart = (event: any) => {
+    const handleDragStart = () => {
       console.log('Transform drag started');
       setIsDragging(true);
       onDraggingChange?.(true);
-      
-      // Cambiar cursor y deshabilitar controles de cámara
       gl.domElement.style.cursor = 'grabbing';
-      
-      // Detener propagación del evento para evitar interferencias
-      event.stopPropagation?.();
     };
 
-    const handleDragEnd = (event: any) => {
+    const handleDragEnd = () => {
       console.log('Transform drag ended');
       setIsDragging(false);
       onDraggingChange?.(false);
@@ -46,29 +41,23 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       
       if (object) {
         object.updateMatrixWorld(true);
-        console.log('Transform completed for object:', object.name || object.type);
+        console.log('Transform completed - new position:', object.position);
       }
-      
-      // Detener propagación del evento
-      event.stopPropagation?.();
     };
 
-    const handleObjectChange = (event: any) => {
+    const handleObjectChange = () => {
       if (object && isDragging) {
         object.updateMatrixWorld(true);
-        console.log('Object position changed:', object.position);
+        console.log('Object transforming - position:', object.position);
       }
-      
-      // Detener propagación del evento
-      event.stopPropagation?.();
     };
 
-    // Usar el evento correcto de TransformControls
+    // Eventos de TransformControls
     controls.addEventListener('dragging-changed', (event: any) => {
       if (event.value) {
-        handleDragStart(event);
+        handleDragStart();
       } else {
-        handleDragEnd(event);
+        handleDragEnd();
       }
     });
     
@@ -76,19 +65,23 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     
     return () => {
       if (controls) {
-        controls.removeEventListener('dragging-changed', (event: any) => {
-          if (event.value) {
-            handleDragStart(event);
-          } else {
-            handleDragEnd(event);
-          }
-        });
-        controls.removeEventListener('objectChange', handleObjectChange);
+        try {
+          controls.removeEventListener('dragging-changed', (event: any) => {
+            if (event.value) {
+              handleDragStart();
+            } else {
+              handleDragEnd();
+            }
+          });
+          controls.removeEventListener('objectChange', handleObjectChange);
+        } catch (error) {
+          console.warn('Error removing event listeners:', error);
+        }
       }
     };
   }, [onDraggingChange, gl, object, isDragging]);
 
-  // Configurar y vincular objeto
+  // Adjuntar/desadjuntar objeto
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
@@ -96,29 +89,31 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     if (isActive && object) {
       console.log('Attaching object to transform controls:', object.name || object.type);
       
-      // Asegurar que el objeto esté en la escena
-      if (!object.parent) {
-        console.warn('Object has no parent, skipping attach');
-        return;
-      }
-
       try {
-        // Asegurar que las matrices se actualicen automáticamente
-        object.traverse((child) => {
-          child.matrixAutoUpdate = true;
-        });
+        // Desadjuntar cualquier objeto previo
+        if (controls.object) {
+          controls.detach();
+        }
 
-        // Adjuntar el objeto a los controles
-        controls.attach(object);
-        controls.setMode(mode);
+        // Asegurar que el objeto permite transformaciones
+        object.matrixAutoUpdate = true;
         
-        // Configurar el tamaño y visibilidad de los controles
-        controls.setSize(1.2);
+        // Adjuntar el nuevo objeto
+        controls.attach(object);
+        
+        // Configurar modo y propiedades
+        controls.setMode(mode);
+        controls.setSize(1.5);
+        
+        // Habilitar todos los ejes
         controls.showX = true;
         controls.showY = true;
         controls.showZ = true;
         
-        // Configurar snapping según el modo
+        // Configurar espacio de transformación
+        controls.space = 'world';
+        
+        // Configurar snapping
         if (mode === 'translate') {
           controls.setTranslationSnap(0.1);
           controls.setRotationSnap(null);
@@ -127,29 +122,29 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
           controls.setRotationSnap(THREE.MathUtils.degToRad(15));
         }
         
-        console.log('Transform Controls attached successfully, mode:', mode);
+        // Asegurar que los controles están habilitados
+        controls.enabled = true;
+        
+        console.log('Transform Controls configured successfully');
+        console.log('- Mode:', mode);
+        console.log('- Object attached:', !!controls.object);
+        console.log('- Controls enabled:', controls.enabled);
         
       } catch (error) {
-        console.error('Error attaching object to transform controls:', error);
+        console.error('Error configuring transform controls:', error);
       }
     } else {
-      console.log('Detaching from transform controls');
+      // Desadjuntar cuando no está activo
       if (controls.object) {
-        controls.detach();
-      }
-    }
-
-    // Limpiar al desmontar o cambiar de objeto
-    return () => {
-      if (controls && controls.object && !isDragging) {
+        console.log('Detaching from transform controls');
         try {
           controls.detach();
         } catch (error) {
           console.warn('Error detaching controls:', error);
         }
       }
-    };
-  }, [object, isActive, mode, isDragging]);
+    }
+  }, [object, isActive, mode]);
 
   // No renderizar si no está activo o no hay objeto
   if (!isActive || !object) {
@@ -162,12 +157,12 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       mode={mode}
       camera={camera}
       domElement={gl.domElement}
-      size={1.2}
+      size={1.5}
       showX={true}
       showY={true}
       showZ={true}
       space="world"
-      enabled={true}
+      enabled={!isDragging} // Cambio importante: habilitar cuando NO está arrastrando
       userData={{ isTransformControl: true }}
     />
   );

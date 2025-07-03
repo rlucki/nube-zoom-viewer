@@ -393,20 +393,36 @@ export const PointCloudViewer: React.FC = () => {
     }
   }, []);
 
-  // Manejar arrastre de transformación - MEJORADO
+  // Manejar arrastre de transformación - CORREGIDO
   const handleTransformDragChange = useCallback((dragging: boolean) => {
     console.log('Transform dragging changed:', dragging);
     setIsTransformDragging(dragging);
     
-    // Deshabilitar completamente los controles de cámara durante transformaciones
-    updateCameraControls(!dragging);
+    // Deshabilitar controles de cámara durante transformaciones
+    setCameraControlsEnabled(!dragging);
+    
+    // Actualizar controles directamente
+    if (controlsRef.current) {
+      controlsRef.current.enabled = !dragging;
+      if (dragging) {
+        // Desactivar completamente los controles durante el arrastre
+        controlsRef.current.enablePan = false;
+        controlsRef.current.enableZoom = false;
+        controlsRef.current.enableRotate = false;
+      } else {
+        // Reactivar controles después del arrastre
+        controlsRef.current.enablePan = true;
+        controlsRef.current.enableZoom = true;
+        controlsRef.current.enableRotate = true;
+      }
+    }
     
     if (dragging) {
       startDrag('transform');
     } else {
       endDrag();
     }
-  }, [startDrag, endDrag, updateCameraControls]);
+  }, [startDrag, endDrag]);
 
   /* -------------------------------------------------------------------------- */
   /*  Escena interna (luces, modelos, etc.)                                     */
@@ -516,13 +532,13 @@ export const PointCloudViewer: React.FC = () => {
             onSnapModeChange={setSnapMode}
           />
 
-          {/* Controles de cámara - COMPLETAMENTE deshabilitados durante transformaciones */}
+          {/* Controles de cámara - MEJORADOS */}
           <OrbitControls
             ref={controlsRef}
-            enablePan={cameraControlsEnabled && !isTransformDragging}
-            enableZoom={cameraControlsEnabled && !isTransformDragging}
-            enableRotate={cameraControlsEnabled && !isTransformDragging}
-            enabled={cameraControlsEnabled && !isTransformDragging}
+            enablePan={!isTransformDragging}
+            enableZoom={!isTransformDragging}
+            enableRotate={!isTransformDragging}
+            enabled={!isTransformDragging}
             zoomSpeed={0.6}
             panSpeed={0.8}
             rotateSpeed={0.4}
