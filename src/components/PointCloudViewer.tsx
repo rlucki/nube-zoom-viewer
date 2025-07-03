@@ -29,6 +29,27 @@ import { computeCoverage, CoverageMap } from '../registration/progressMetrics';
 
 import { useToast } from '@/hooks/use-toast';
 
+function samplePoints(points: Point[], density: number): Point[] {
+  if (density >= 1 || points.length === 0) {
+    return points;
+  }
+
+  const sampleSize = Math.ceil(points.length * density);
+  if (sampleSize >= points.length) {
+    return points;
+  }
+
+  const step = points.length / sampleSize;
+  const sampled: Point[] = [];
+  for (let i = 0; i < sampleSize; i++) {
+    const index = Math.floor(i * step);
+    if (index < points.length) {
+      sampled.push(points[index]);
+    }
+  }
+  return sampled;
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Tipos                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -123,35 +144,19 @@ export const PointCloudViewer: React.FC = () => {
   }, [toast]);
 
   /* -------------------- Memos: muestras y modelos IFC ---------------------- */
-  const sampledPoints = useMemo(() => {
+  const sampledPointClouds = useMemo(() => {
     const pcs = loadedFiles.filter((f) => f.type === 'pointcloud');
-    if (pcs.length === 0) return [];
-
-    const all = pcs.flatMap((f) => f.data as Point[]);
-    if (all.length === 0) return [];
-
-    // Mejorar el algoritmo de sampling para distribuir mejor los puntos
-    if (density >= 1) {
-      return all; // Mostrar todos los puntos si la densidad es 100%
-    }
-
-    const sampleSize = Math.ceil(all.length * density);
-    if (sampleSize >= all.length) {
-      return all;
-    }
-
-    // Usar sampling regular en lugar de por pasos para mejor distribución
-    const step = all.length / sampleSize;
-    const sampled = [];
-    for (let i = 0; i < sampleSize; i++) {
-      const index = Math.floor(i * step);
-      if (index < all.length) {
-        sampled.push(all[index]);
-      }
-    }
-
-    return sampled;
+    return pcs.map((f) => ({
+      id: f.id,
+      name: f.name,
+      points: samplePoints(f.data as Point[], density),
+    }));
   }, [loadedFiles, density]);
+
+  const combinedSampledPoints = useMemo(
+    () => sampledPointClouds.flatMap((pc) => pc.points),
+    [sampledPointClouds],
+  );
 
   const ifcModels = useMemo(
     () => loadedFiles.filter((f) => f.type === 'ifc'),
@@ -219,14 +224,14 @@ export const PointCloudViewer: React.FC = () => {
   }, [toast]);
 
   const handleComputeProgress = useCallback(() => {
-    if (ifcModels.length === 0 || sampledPoints.length === 0) return;
+    if (ifcModels.length === 0 || combinedSampledPoints.length === 0) return;
     const mesh = (ifcModels[0].data as IFCGeometry).meshes[0];
     const ctx = buildBVH(mesh);
-    const coverage = computeCoverage(sampledPoints, ctx);
+    const coverage = computeCoverage(combinedSampledPoints, ctx);
     setProgressData(coverage);
     setShowProgress(true);
     toast({ title: 'Progreso calculado', description: 'Cobertura analizada' });
-  }, [ifcModels, sampledPoints, toast]);
+  }, [ifcModels, combinedSampledPoints, toast]);
 
   /* -------------------- Mejorar medición con primitivas ------------------- */
   const enhancedHandleMeasurement = useCallback(
@@ -352,7 +357,7 @@ export const PointCloudViewer: React.FC = () => {
   }, [cancelDrag]);
 
   const handleDetectPrimitives = useCallback(() => {
-    if (sampledPoints.length === 0) {
+    if (combinedSampledPoints.length === 0) {
       toast({
         title: 'No hay puntos',
         description: 'Carga una nube de puntos primero',
@@ -361,7 +366,7 @@ export const PointCloudViewer: React.FC = () => {
       return;
     }
 
-    detectPrimitives(sampledPoints);
+    detectPrimitives(combinedSampledPoints);
     setPrimitiveDetectionActive(true);
     setShowPrimitives(true);
     
@@ -369,7 +374,7 @@ export const PointCloudViewer: React.FC = () => {
       title: 'Detectando primitivas',
       description: 'Analizando la nube de puntos...',
     });
-  }, [sampledPoints, detectPrimitives, toast]);
+  }, [combinedSampledPoints, detectPrimitives, toast]);
 
   const handleClearPrimitives = useCallback(() => {
     clearPrimitives();
@@ -495,14 +500,17 @@ export const PointCloudViewer: React.FC = () => {
       <>
         <Scene>
           <group ref={contentGroupRef}>
-            {/* Point-cloud */}
-            {sampledPoints.length > 0 && (
+            {/* Point-clouds */}
+            {sampledPointClouds.map((pc) => (
               <PointCloud
-                points={sampledPoints}
+                key={pc.id}
+                points={pc.points}
                 pointSize={pointSize}
                 colorMode={colorMode}
+                name={pc.name}
+                userData={{ sourceId: pc.id, type: 'pointcloud' }}
               />
-            )}
+            ))}
 
             {/* Modelos IFC */}
             {ifcModels.map((file) => (
@@ -510,6 +518,8 @@ export const PointCloudViewer: React.FC = () => {
                 key={file.id}
                 geometry={file.data as IFCGeometry}
                 transparency={transparency}
+                name={file.name}
+                userData={{ sourceId: file.id, type: 'ifc' }}
               />
             ))}
 
@@ -628,10 +638,10 @@ export const PointCloudViewer: React.FC = () => {
         totalCount={loadedFiles
           .filter((f) => f.type === 'pointcloud')
           .reduce((acc, f) => acc + (f.data as Point[]).length, 0)}
-        visibleCount={sampledPoints.length}
+        visibleCount={combinedSampledPoints.length}
         isVisible={controlsVisible}
         onToggleVisibility={() => setControlsVisible(!controlsVisible)}
-        isPointCloud={sampledPoints.length > 0}
+        isPointCloud={sampledPointClouds.length > 0}
         hasIFCModel={ifcModels.length > 0}
       />
 
