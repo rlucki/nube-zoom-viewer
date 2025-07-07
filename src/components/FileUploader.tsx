@@ -109,9 +109,9 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     const blob = new Blob([buffer], { type: 'application/octet-stream' });
     const url  = URL.createObjectURL(blob);
     try {
-      const group = await ifcLoader.loadAsync(url) as THREE.Group;
+      const model = await ifcLoader.loadAsync(url) as THREE.Group & { modelID: number };
       const meshes: THREE.Mesh[] = [];
-      group.traverse(child => {
+      model.traverse(child => {
         if ((child as THREE.Mesh).isMesh) {
           const m = (child as THREE.Mesh).clone();
           m.geometry.computeBoundingBox();
@@ -119,8 +119,14 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
           meshes.push(m);
         }
       });
-      const box = new THREE.Box3().setFromObject(group);
-      return { type: 'ifc', meshes, bounds: { min: box.min.clone(), max: box.max.clone() }};
+      const box = new THREE.Box3().setFromObject(model);
+      return {
+        type: 'ifc',
+        meshes,
+        bounds: { min: box.min.clone(), max: box.max.clone() },
+        modelID: (model as any).modelID,
+        ifcManager: ifcLoader.ifcManager,
+      };
     } finally {
       URL.revokeObjectURL(url);
     }

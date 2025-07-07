@@ -59,12 +59,14 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- D3.js
 
 ## Features
 
 - Load point clouds and IFC models.
 - Section planes and measurement tools.
 - **New:** interactive transform gizmo to move or rotate selected objects.
+- **New:** IFC graph viewer panel built with D3.js.
 
 ## How can I deploy this project?
 
