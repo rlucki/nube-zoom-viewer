@@ -1,5 +1,5 @@
 import React from 'react';
-import { Upload, RotateCcw, Move, Ruler, RotateCw, Box, Trash2, Rotate3d, Scan, Eye, EyeOff } from 'lucide-react';
+import { Upload, RotateCcw, Move, Ruler, RotateCw, Box, Trash2, Rotate3d, Scan, Eye, EyeOff, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileUploader } from './FileUploader';
@@ -43,6 +43,10 @@ interface TopToolbarProps {
   // Progreso
   onComputeProgress: () => void;
   hasIFC: boolean;
+
+  // IFC Graph
+  onToggleIfcGraph: () => void;
+  showIfcGraph: boolean;
 }
 
 export const TopToolbar: React.FC<TopToolbarProps> = ({
@@ -78,6 +82,8 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   onToggleShowPrimitives,
   onComputeProgress,
   hasIFC,
+  onToggleIfcGraph,
+  showIfcGraph,
 }) => {
   // La barra será más alta cuando hay controles secundarios o slider activo
   const hasExtendedTools = measurementActive || transformActive || showSectionSensitivity;
@@ -257,6 +263,19 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               title="Calcular Progreso"
             >
               Progreso IFC
+            </Button>
+          )}
+
+          {/* Mostrar Grafo IFC */}
+          {hasIFC && (
+            <Button
+              onClick={onToggleIfcGraph}
+              variant="outline"
+              size="sm"
+              className={`text-white border-gray-600 ${showIfcGraph ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-800 hover:bg-gray-700'}`}
+              title="Ver Grafo IFC"
+            >
+              <GitBranch className="h-4 w-4 mr-1" /> Ver Grafos IFC
             </Button>
           )}
 

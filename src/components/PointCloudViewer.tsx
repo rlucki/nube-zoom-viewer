@@ -24,6 +24,7 @@ import { useDragState } from '../hooks/useDragState';
 import { usePrimitiveDetection } from '../hooks/usePrimitiveDetection';
 import { PrimitiveVisualizer } from './PrimitiveVisualizer';
 import { ProgressPanel } from './ProgressPanel';
+import { IFCGraphPanel } from './IFCGraphPanel';
 import { buildBVH } from '../registration/bvhIntersect';
 import { computeCoverage, CoverageMap } from '../registration/progressMetrics';
 
@@ -49,6 +50,8 @@ export interface IFCGeometry {
     min: THREE.Vector3;
     max: THREE.Vector3;
   };
+  modelID: number;
+  ifcManager: any;
 }
 
 export type ViewerData = Point[] | IFCGeometry;
@@ -114,6 +117,9 @@ export const PointCloudViewer: React.FC = () => {
   const [progressData, setProgressData] = useState<CoverageMap | null>(null);
   const [showProgress, setShowProgress] = useState(false);
 
+  /* -------------------- IFC Graph Panel ---------------------------------- */
+  const [showIfcGraph, setShowIfcGraph] = useState(false);
+
   /* -------------------- Mensaje de bienvenida ------------------------------ */
   useEffect(() => {
     toast({
@@ -157,6 +163,12 @@ export const PointCloudViewer: React.FC = () => {
     () => loadedFiles.filter((f) => f.type === 'ifc'),
     [loadedFiles],
   );
+
+  const ifcGraphInfo = useMemo(() => {
+    if (ifcModels.length === 0) return null;
+    const geom = ifcModels[0].data as IFCGeometry;
+    return { modelID: geom.modelID, ifcManager: geom.ifcManager };
+  }, [ifcModels]);
 
   /* -------------------- Carga y limpieza ----------------------------------- */
   const handleFileLoad = useCallback(
@@ -574,6 +586,8 @@ export const PointCloudViewer: React.FC = () => {
         onToggleShowPrimitives={setShowPrimitives}
         onComputeProgress={handleComputeProgress}
         hasIFC={ifcModels.length > 0}
+        onToggleIfcGraph={() => setShowIfcGraph(!showIfcGraph)}
+        showIfcGraph={showIfcGraph}
       />
 
       {/* ---------- Display de transformación -------------------------------- */}
@@ -606,6 +620,13 @@ export const PointCloudViewer: React.FC = () => {
 
       {showProgress && (
         <ProgressPanel data={progressData} onClose={() => setShowProgress(false)} />
+      )}
+      {showIfcGraph && ifcGraphInfo && (
+        <IFCGraphPanel
+          ifcManager={ifcGraphInfo.ifcManager}
+          modelID={ifcGraphInfo.modelID}
+          onClose={() => setShowIfcGraph(false)}
+        />
       )}
       {/* --- QUITADO: Section Box Sensitivity Slider --- */}
 
