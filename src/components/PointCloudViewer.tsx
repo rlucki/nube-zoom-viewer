@@ -75,7 +75,7 @@ export const PointCloudViewer: React.FC = () => {
   const [transparency, setTransparency] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const [dragSensitivity, setDragSensitivity] = useState(0.003);
+  const [dragSensitivity, setDragSensitivity] = useState(0.001); // Reducir sensibilidad por defecto
 
   const controlsRef = useRef<any>(null);
   const { toast } = useToast();
@@ -329,29 +329,23 @@ export const PointCloudViewer: React.FC = () => {
     setCameraControlsEnabled(enabled);
     if (controlsRef.current) {
       controlsRef.current.enabled = enabled;
-      // Restaurar sensibilidad normal cuando se habilita
+      // Aumentar sensibilidad para mejor control
       if (enabled) {
-        controlsRef.current.rotateSpeed = 1.0; // Sensibilidad normal
-        controlsRef.current.zoomSpeed = 1.0;
-        controlsRef.current.panSpeed = 1.0;
+        controlsRef.current.rotateSpeed = 2.0; // Mayor sensibilidad
+        controlsRef.current.zoomSpeed = 1.5;
+        controlsRef.current.panSpeed = 1.5;
       }
     }
   }, []);
 
-  // Manejar arrastre de transformación
+  // Manejar arrastre de transformación - SIMPLIFICADO
   const handleTransformDragChange = useCallback((dragging: boolean) => {
     console.log('Transform dragging changed:', dragging);
     setIsTransformDragging(dragging);
     
-    // Desactivar controles de cámara durante el arrastre de transformación
+    // Solo desactivar controles durante arrastre real
     updateCameraControls(!dragging);
-    
-    if (dragging) {
-      startDrag('transform');
-    } else {
-      endDrag();
-    }
-  }, [startDrag, endDrag, updateCameraControls]);
+  }, [updateCameraControls]);
 
   const handleTransformToggle = useCallback((active: boolean) => {
     console.log('Transform toggle:', active);
@@ -514,12 +508,13 @@ export const PointCloudViewer: React.FC = () => {
             />
           </group>
 
-          {/* Selector de objetos - completamente deshabilitado durante transformación */}
+          {/* Selector de objetos - con menor sensibilidad */}
           <ObjectSelector
             isActive={transformActive && !selectedObject && !isTransformDragging}
             isDragging={isTransformDragging}
             onObjectHover={() => {}}
             onObjectSelect={handleObjectSelection}
+            hoverSensitivity={0.3} // Reducir sensibilidad de hover
           />
 
           {/* Manipulador de transformación */}
@@ -539,18 +534,20 @@ export const PointCloudViewer: React.FC = () => {
             onSnapModeChange={setSnapMode}
           />
 
-          {/* Controles de cámara - con sensibilidad mejorada */}
+          {/* Controles de cámara - con mayor sensibilidad */}
           <OrbitControls
             ref={controlsRef}
             enablePan={cameraControlsEnabled}
             enableZoom={cameraControlsEnabled}
             enableRotate={cameraControlsEnabled}
             enabled={cameraControlsEnabled}
-            zoomSpeed={1.0}
-            panSpeed={1.0}
-            rotateSpeed={1.0}
-            dampingFactor={0.05}
+            zoomSpeed={1.5} // Aumentar sensibilidad
+            panSpeed={1.5}
+            rotateSpeed={2.0} // Mayor sensibilidad de rotación
+            dampingFactor={0.03} // Menor damping para más responsividad
             enableDamping={true}
+            maxDistance={1000}
+            minDistance={0.1}
           />
 
           {/* Stats */}

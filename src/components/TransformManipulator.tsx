@@ -30,7 +30,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       console.log('Attaching object to transform controls:', object.name || object.type);
       
       try {
-        // Ensure the object updates its matrices when modified
+        // Asegurar que el objeto actualice sus matrices
         object.traverse((child) => {
           child.matrixAutoUpdate = true;
         });
@@ -38,18 +38,29 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
         controls.attach(object);
         controls.setMode(mode);
         
-        // Configurar controles para mejor interacción
-        controls.setSize(1.5); // Aumentar tamaño para mejor interacción
+        // Configurar controles optimizados para arrastre
+        controls.setSize(2.0); // Tamaño mayor para mejor interacción
         controls.setSpace('world');
         
-        // Configurar snapping
+        // Configurar snapping más suave
         if (mode === 'translate') {
-          controls.setTranslationSnap(0.1);
+          controls.setTranslationSnap(0.05); // Snap más fino
           controls.setRotationSnap(null);
         } else if (mode === 'rotate') {
           controls.setTranslationSnap(null);
-          controls.setRotationSnap(THREE.MathUtils.degToRad(15));
+          controls.setRotationSnap(THREE.MathUtils.degToRad(5)); // Snap más fino
         }
+        
+        // Configurar eventos directamente en el control
+        controls.addEventListener('mouseDown', () => {
+          console.log('Transform controls mouse down');
+          gl.domElement.style.cursor = 'grabbing';
+        });
+        
+        controls.addEventListener('mouseUp', () => {
+          console.log('Transform controls mouse up');
+          gl.domElement.style.cursor = 'grab';
+        });
         
         console.log('Transform Controls attached successfully');
         
@@ -61,24 +72,27 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       if (controls.object) {
         controls.detach();
       }
+      gl.domElement.style.cursor = 'default';
     }
-  }, [object, isActive, mode]);
+  }, [object, isActive, mode, gl]);
 
-  // Manejar eventos de arrastre - simplificado y más directo
+  // Manejar eventos de arrastre - CORREGIDO
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls || !isActive) return;
 
     const handleDragStart = () => {
-      console.log('Transform drag started');
+      console.log('Transform drag started - REAL');
       setIsDragging(true);
       onDraggingChange?.(true);
+      gl.domElement.style.cursor = 'grabbing';
     };
 
     const handleDragEnd = () => {
-      console.log('Transform drag ended');
+      console.log('Transform drag ended - REAL');
       setIsDragging(false);
       onDraggingChange?.(false);
+      gl.domElement.style.cursor = 'grab';
       
       if (object) {
         object.updateMatrixWorld(true);
@@ -92,35 +106,51 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
     };
 
-    // Usar solo el evento dragging-changed que es más confiable
+    // Usar evento dragging-changed que es el más confiable
     const handleDraggingChanged = (event: any) => {
       console.log('Dragging changed event:', event.value);
-      if (event.value) {
+      const isDraggingNow = event.value;
+      
+      if (isDraggingNow && !isDragging) {
         handleDragStart();
-      } else {
+      } else if (!isDraggingNow && isDragging) {
         handleDragEnd();
       }
     };
 
-    // Agregar listeners
+    // Eventos adicionales para mejor detección
+    const handleMouseDown = () => {
+      console.log('Transform controls mousedown detected');
+    };
+
+    const handleMouseUp = () => {
+      console.log('Transform controls mouseup detected');
+    };
+
+    // Agregar todos los listeners
     controls.addEventListener('dragging-changed', handleDraggingChanged);
     controls.addEventListener('objectChange', handleObjectChange);
+    controls.addEventListener('mouseDown', handleMouseDown);
+    controls.addEventListener('mouseUp', handleMouseUp);
     
     return () => {
       if (controls) {
         controls.removeEventListener('dragging-changed', handleDraggingChanged);
         controls.removeEventListener('objectChange', handleObjectChange);
+        controls.removeEventListener('mouseDown', handleMouseDown);
+        controls.removeEventListener('mouseUp', handleMouseUp);
       }
     };
-  }, [onDraggingChange, object, isActive]);
+  }, [onDraggingChange, object, isActive, isDragging, gl]);
 
   // Cleanup cuando se desactiva
   useEffect(() => {
     if (!isActive) {
       setIsDragging(false);
       onDraggingChange?.(false);
+      gl.domElement.style.cursor = 'default';
     }
-  }, [isActive, onDraggingChange]);
+  }, [isActive, onDraggingChange, gl]);
 
   // No renderizar si no está activo o no hay objeto
   if (!isActive || !object) {
@@ -133,7 +163,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       mode={mode}
       camera={camera}
       domElement={gl.domElement}
-      size={1.5}
+      size={2.0} // Tamaño mayor
       showX={true}
       showY={true}
       showZ={true}

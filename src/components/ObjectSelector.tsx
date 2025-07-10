@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
@@ -8,6 +7,7 @@ interface ObjectSelectorProps {
   isDragging?: boolean;
   onObjectHover?: (obj: THREE.Object3D | null) => void;
   onObjectSelect?: (obj: THREE.Object3D | null) => void;
+  hoverSensitivity?: number; // Nueva prop para controlar sensibilidad
 }
 
 export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
@@ -15,12 +15,14 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   isDragging = false,
   onObjectHover,
   onObjectSelect,
+  hoverSensitivity = 1.0, // Valor por defecto
 }) => {
   const { camera, scene, gl } = useThree();
   const [hovered, setHovered] = useState<THREE.Object3D | null>(null);
   const [selected, setSelected] = useState<THREE.Object3D | null>(null);
   const raycaster = useRef(new THREE.Raycaster());
   const originalMaterials = useRef(new Map<THREE.Object3D, any>());
+  const hoverTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const getSelectableObjects = (): THREE.Object3D[] => {
     const objects: THREE.Object3D[] = [];
@@ -129,41 +131,49 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
       return;
     }
 
-    const rect = gl.domElement.getBoundingClientRect();
-    const mouse = new THREE.Vector2(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1
-    );
+    // Limpiar timeout anterior
+    if (hoverTimeout.current) {
+      clearTimeout(hoverTimeout.current);
+    }
 
-    raycaster.current.setFromCamera(mouse, camera);
-    const intersects = raycaster.current.intersectObjects(getSelectableObjects(), true);
+    // Aplicar sensibilidad mediante timeout
+    hoverTimeout.current = setTimeout(() => {
+      const rect = gl.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
 
-    if (intersects.length > 0) {
-      const targetObject = findBestParent(intersects[0].object);
+      raycaster.current.setFromCamera(mouse, camera);
+      const intersects = raycaster.current.intersectObjects(getSelectableObjects(), true);
 
-      if (targetObject !== hovered) {
-        // Restaurar material anterior
+      if (intersects.length > 0) {
+        const targetObject = findBestParent(intersects[0].object);
+
+        if (targetObject !== hovered) {
+          // Restaurar material anterior
+          if (hovered && hovered !== selected) {
+            restoreOriginalMaterial(hovered);
+          }
+          
+          // Aplicar hover solo si no está seleccionado
+          if (targetObject !== selected) {
+            setHoverMaterial(targetObject);
+          }
+          
+          setHovered(targetObject);
+          onObjectHover?.(targetObject);
+          gl.domElement.style.cursor = 'pointer';
+        }
+      } else {
         if (hovered && hovered !== selected) {
           restoreOriginalMaterial(hovered);
         }
-        
-        // Aplicar hover solo si no está seleccionado
-        if (targetObject !== selected) {
-          setHoverMaterial(targetObject);
-        }
-        
-        setHovered(targetObject);
-        onObjectHover?.(targetObject);
-        gl.domElement.style.cursor = 'pointer';
+        setHovered(null);
+        onObjectHover?.(null);
+        gl.domElement.style.cursor = 'default';
       }
-    } else {
-      if (hovered && hovered !== selected) {
-        restoreOriginalMaterial(hovered);
-      }
-      setHovered(null);
-      onObjectHover?.(null);
-      gl.domElement.style.cursor = 'default';
-    }
+    }, (1 - hoverSensitivity) * 100); // Menor sensibilidad = mayor delay
   };
 
   const handleClick = (event: MouseEvent) => {
@@ -199,15 +209,20 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     if (isActive && !isDragging) {
       const canvas = gl.domElement;
       
-      canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('mousemove', handleMouseMove, { passive: true });
       canvas.addEventListener('click', handleClick);
 
       return () => {
         canvas.removeEventListener('mousemove', handleMouseMove);
         canvas.removeEventListener('click', handleClick);
+        
+        // Limpiar timeout
+        if (hoverTimeout.current) {
+          clearTimeout(hoverTimeout.current);
+        }
       };
     }
-  }, [isActive, isDragging, hovered, selected]);
+  }, [isActive, isDragging, hovered, selected, hoverSensitivity]);
 
   // Limpiar todo cuando se desactiva o cuando el componente se desmonta
   useEffect(() => {
