@@ -93,7 +93,6 @@ export const PointCloudViewer: React.FC = () => {
     Array<{ distance: number; points: [THREE.Vector3, THREE.Vector3] }>
   >([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [toolStateReset, setToolStateReset] = useState(0); // Para forzar reset
   const [sectionBoxBounds, setSectionBoxBounds] = useState<{
     min: THREE.Vector3;
     max: THREE.Vector3;
@@ -310,7 +309,6 @@ export const PointCloudViewer: React.FC = () => {
     }
     
     setSectionBoxActive(active);
-    setToolStateReset(prev => prev + 1); // Forzar reset de estado
     
     toast({
       title: active
@@ -366,7 +364,6 @@ export const PointCloudViewer: React.FC = () => {
     }
     
     setTransformActive(active);
-    setToolStateReset(prev => prev + 1); // Forzar reset de estado
     
     toast({
       title: active ? 'Herramienta de transformación activada' : 'Herramienta de transformación desactivada',
@@ -388,7 +385,6 @@ export const PointCloudViewer: React.FC = () => {
     }
     
     setMeasurementActive(active);
-    setToolStateReset(prev => prev + 1); // Forzar reset de estado
   }, [cancelDrag]);
 
   const handleDetectPrimitives = useCallback(() => {
@@ -653,7 +649,6 @@ export const PointCloudViewer: React.FC = () => {
 
       {/* ---------- Canvas (Three.js) -------------------------------------- */}
       <Canvas
-        key={toolStateReset} // Forzar re-render cuando cambian herramientas
         camera={{ position: [50, 50, 50], fov: 60, near: 0.01, far: 100000 }}
         className="absolute inset-0"
         gl={{ 
