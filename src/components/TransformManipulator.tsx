@@ -39,7 +39,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
         controls.setMode(mode);
         
         // Configurar controles para mejor interacción
-        controls.setSize(1.2);
+        controls.setSize(1.5); // Aumentar tamaño para mejor interacción
         controls.setSpace('world');
         
         // Configurar snapping
@@ -64,10 +64,10 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     }
   }, [object, isActive, mode]);
 
-  // Manejar eventos de arrastre
+  // Manejar eventos de arrastre - simplificado y más directo
   useEffect(() => {
     const controls = controlsRef.current;
-    if (!controls) return;
+    if (!controls || !isActive) return;
 
     const handleDragStart = () => {
       console.log('Transform drag started');
@@ -87,12 +87,12 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     };
 
     const handleObjectChange = () => {
-      if (object && isDragging) {
+      if (object) {
         object.updateMatrixWorld(true);
       }
     };
 
-    // Evento principal de cambio de arrastre
+    // Usar solo el evento dragging-changed que es más confiable
     const handleDraggingChanged = (event: any) => {
       console.log('Dragging changed event:', event.value);
       if (event.value) {
@@ -102,11 +102,9 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
     };
 
-    // Solo agregar listeners si está activo
-    if (isActive) {
-      controls.addEventListener('dragging-changed', handleDraggingChanged);
-      controls.addEventListener('objectChange', handleObjectChange);
-    }
+    // Agregar listeners
+    controls.addEventListener('dragging-changed', handleDraggingChanged);
+    controls.addEventListener('objectChange', handleObjectChange);
     
     return () => {
       if (controls) {
@@ -114,7 +112,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
         controls.removeEventListener('objectChange', handleObjectChange);
       }
     };
-  }, [onDraggingChange, object, isDragging, isActive]);
+  }, [onDraggingChange, object, isActive]);
 
   // Cleanup cuando se desactiva
   useEffect(() => {
@@ -135,7 +133,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       mode={mode}
       camera={camera}
       domElement={gl.domElement}
-      size={1.2}
+      size={1.5}
       showX={true}
       showY={true}
       showZ={true}

@@ -329,6 +329,12 @@ export const PointCloudViewer: React.FC = () => {
     setCameraControlsEnabled(enabled);
     if (controlsRef.current) {
       controlsRef.current.enabled = enabled;
+      // Restaurar sensibilidad normal cuando se habilita
+      if (enabled) {
+        controlsRef.current.rotateSpeed = 1.0; // Sensibilidad normal
+        controlsRef.current.zoomSpeed = 1.0;
+        controlsRef.current.panSpeed = 1.0;
+      }
     }
   }, []);
 
@@ -508,9 +514,9 @@ export const PointCloudViewer: React.FC = () => {
             />
           </group>
 
-          {/* Selector de objetos (solo para Transformación) */}
+          {/* Selector de objetos - completamente deshabilitado durante transformación */}
           <ObjectSelector
-            isActive={transformActive && !isTransformDragging}
+            isActive={transformActive && !selectedObject && !isTransformDragging}
             isDragging={isTransformDragging}
             onObjectHover={() => {}}
             onObjectSelect={handleObjectSelection}
@@ -519,7 +525,7 @@ export const PointCloudViewer: React.FC = () => {
           {/* Manipulador de transformación */}
           <TransformManipulator
             object={selectedObject}
-            isActive={transformActive}
+            isActive={transformActive && selectedObject !== null}
             mode={transformMode}
             onDraggingChange={handleTransformDragChange}
           />
@@ -533,16 +539,18 @@ export const PointCloudViewer: React.FC = () => {
             onSnapModeChange={setSnapMode}
           />
 
-          {/* Controles de cámara - habilitados/deshabilitados según el estado */}
+          {/* Controles de cámara - con sensibilidad mejorada */}
           <OrbitControls
             ref={controlsRef}
             enablePan={cameraControlsEnabled}
             enableZoom={cameraControlsEnabled}
             enableRotate={cameraControlsEnabled}
             enabled={cameraControlsEnabled}
-            zoomSpeed={0.6}
-            panSpeed={0.8}
-            rotateSpeed={0.4}
+            zoomSpeed={1.0}
+            panSpeed={1.0}
+            rotateSpeed={1.0}
+            dampingFactor={0.05}
+            enableDamping={true}
           />
 
           {/* Stats */}
