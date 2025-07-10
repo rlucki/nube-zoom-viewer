@@ -6,10 +6,12 @@ import { Card } from '@/components/ui/card';
 interface IFCGraphPanelProps {
   ifcManager: any;
   modelID: number;
+  clusters?: { colors: Record<string, string> } | null;
   onClose: () => void;
+  layout?: 'radial' | 'force3d';
 }
 
-export const IFCGraphPanel: React.FC<IFCGraphPanelProps> = ({ ifcManager, modelID, onClose }) => {
+export const IFCGraphPanel: React.FC<IFCGraphPanelProps> = ({ ifcManager, modelID, clusters, onClose, layout = 'radial' }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -47,11 +49,15 @@ export const IFCGraphPanel: React.FC<IFCGraphPanelProps> = ({ ifcManager, modelI
         .attr('cx', d => (d as any).x)
         .attr('cy', d => (d as any).y)
         .attr('r', 3)
-        .attr('fill', '#4ade80');
+        .attr('fill', d => {
+          if (!clusters) return '#4ade80';
+          const color = clusters.colors[d.data.expressID];
+          return color ?? '#4ade80';
+        });
     };
     render();
     return () => { cancelled = true; };
-  }, [ifcManager, modelID]);
+  }, [ifcManager, modelID, clusters]);
 
   return (
     <Card className="absolute top-32 right-4 z-10 p-4 bg-black/80 backdrop-blur-sm border-gray-700 text-white">

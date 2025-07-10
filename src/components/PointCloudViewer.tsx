@@ -25,6 +25,8 @@ import { usePrimitiveDetection } from '../hooks/usePrimitiveDetection';
 import { PrimitiveVisualizer } from './PrimitiveVisualizer';
 import { ProgressPanel } from './ProgressPanel';
 import { IFCGraphPanel } from './IFCGraphPanel';
+import { ClusterControls } from './ClusterControls';
+import { useIFCClustering } from '@/hooks/useIFCClustering';
 import { buildBVH } from '../registration/bvhIntersect';
 import { computeCoverage, CoverageMap } from '../registration/progressMetrics';
 
@@ -170,6 +172,10 @@ export const PointCloudViewer: React.FC = () => {
     return { modelID: geom.modelID, ifcManager: geom.ifcManager };
   }, [ifcModels]);
 
+  const clustering = ifcGraphInfo
+    ? useIFCClustering(ifcGraphInfo.ifcManager, ifcGraphInfo.modelID)
+    : { clusters: null, recompute: () => {}, presets: [], currentKey: '' };
+
   /* -------------------- Carga y limpieza ----------------------------------- */
   const handleFileLoad = useCallback(
     (data: ViewerData, fileName: string) => {
@@ -239,6 +245,20 @@ export const PointCloudViewer: React.FC = () => {
     setShowProgress(true);
     toast({ title: 'Progreso calculado', description: 'Cobertura analizada' });
   }, [ifcModels, sampledPoints, toast]);
+
+  useEffect(() => {
+    if (!clustering.clusters || !ifcGraphInfo) return;
+    const { ifcManager, modelID } = ifcGraphInfo;
+    ifcManager.removeSubset(modelID, undefined, undefined);
+    Object.entries(clustering.clusters.clusters).forEach(([key, ids]) => {
+      const subset = ifcManager.createSubset({ modelID, ids, scene: null, removePrevious: false });
+      subset.traverse((obj: any) => {
+        if (obj.isMesh) {
+          (obj.material as any).color.set(clustering.clusters!.colors[key]);
+        }
+      });
+    });
+  }, [clustering.clusters, ifcGraphInfo]);
 
   /* -------------------- Mejorar medición con primitivas ------------------- */
   const enhancedHandleMeasurement = useCallback(
@@ -622,11 +642,20 @@ export const PointCloudViewer: React.FC = () => {
         <ProgressPanel data={progressData} onClose={() => setShowProgress(false)} />
       )}
       {showIfcGraph && ifcGraphInfo && (
+        <>
+          <ClusterControls
+            presets={clustering.presets}
+            current={clustering.currentKey}
+            onChange={clustering.recompute}
+            legend={clustering.clusters?.colors}
+          />
         <IFCGraphPanel
           ifcManager={ifcGraphInfo.ifcManager}
           modelID={ifcGraphInfo.modelID}
+          clusters={clustering.clusters}
           onClose={() => setShowIfcGraph(false)}
         />
+        </>
       )}
       {/* --- QUITADO: Section Box Sensitivity Slider --- */}
 

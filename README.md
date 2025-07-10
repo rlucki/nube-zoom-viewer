@@ -79,3 +79,13 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+
+## Dynamic Clustering
+
+Use the **Cluster** dropdown in the viewer to group IFC elements by properties like `Class`, `Storey` or `FireRating`. Colours and clusters are computed in a Web Worker so the UI stays responsive. The last used preset is stored in `localStorage`.
+
+### Adding new presets
+
+1. Edit `src/hooks/useIFCClustering.ts` and extend the `presets` array.
+2. Optionally provide a key mapping in `ClusterControls` if the display name differs from the IFC property name.
+3. Reload the app and pick the new preset from the dropdown.
