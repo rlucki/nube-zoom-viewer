@@ -73,19 +73,12 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       console.log('Transform drag started');
       setIsDragging(true);
       onDraggingChange?.(true);
-      
-      // Cambiar cursor y deshabilitar controles de cámara
-      gl.domElement.style.cursor = 'grabbing';
-      gl.domElement.style.pointerEvents = 'auto';
     };
 
     const handleDragEnd = () => {
       console.log('Transform drag ended');
       setIsDragging(false);
       onDraggingChange?.(false);
-      
-      // Restaurar cursor y habilitar controles de cámara
-      gl.domElement.style.cursor = 'default';
       
       if (object) {
         object.updateMatrixWorld(true);
@@ -109,72 +102,27 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
     };
 
-    // Agregar listeners
-    controls.addEventListener('dragging-changed', handleDraggingChanged);
-    controls.addEventListener('objectChange', handleObjectChange);
-    
-    // Listener adicional para mouseDown en los controles
-    const handleMouseDown = (event: any) => {
-      console.log('MouseDown on transform control');
-      event.stopPropagation();
-    };
-
-    controls.addEventListener('mouseDown', handleMouseDown);
+    // Solo agregar listeners si está activo
+    if (isActive) {
+      controls.addEventListener('dragging-changed', handleDraggingChanged);
+      controls.addEventListener('objectChange', handleObjectChange);
+    }
     
     return () => {
       if (controls) {
         controls.removeEventListener('dragging-changed', handleDraggingChanged);
         controls.removeEventListener('objectChange', handleObjectChange);
-        controls.removeEventListener('mouseDown', handleMouseDown);
       }
     };
-  }, [onDraggingChange, gl, object, isDragging]);
+  }, [onDraggingChange, object, isDragging, isActive]);
 
-  // Prevenir interferencia con ObjectSelector
+  // Cleanup cuando se desactiva
   useEffect(() => {
-    if (!isActive || !object) return;
-
-    const canvas = gl.domElement;
-    
-    const handleMouseDown = (event: MouseEvent) => {
-      // Solo interceptar si el mouse está sobre los controles
-      const rect = canvas.getBoundingClientRect();
-      const mouse = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1
-      );
-
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(mouse, camera);
-
-      // Buscar controles en la escena
-      const transformElements: THREE.Object3D[] = [];
-      const controls = controlsRef.current;
-      if (controls && controls.children) {
-        controls.traverse((child: THREE.Object3D) => {
-          if (child.visible && (child instanceof THREE.Mesh || child instanceof THREE.Line)) {
-            transformElements.push(child);
-          }
-        });
-      }
-
-      if (transformElements.length > 0) {
-        const intersects = raycaster.intersectObjects(transformElements, true);
-        if (intersects.length > 0) {
-          console.log('Click on transform control detected, preventing object selection');
-          event.stopImmediatePropagation();
-          event.preventDefault();
-        }
-      }
-    };
-
-    // Usar capture: true para interceptar antes que ObjectSelector
-    canvas.addEventListener('mousedown', handleMouseDown, { capture: true });
-
-    return () => {
-      canvas.removeEventListener('mousedown', handleMouseDown, { capture: true });
-    };
-  }, [isActive, object, gl, camera]);
+    if (!isActive) {
+      setIsDragging(false);
+      onDraggingChange?.(false);
+    }
+  }, [isActive, onDraggingChange]);
 
   // No renderizar si no está activo o no hay objeto
   if (!isActive || !object) {
