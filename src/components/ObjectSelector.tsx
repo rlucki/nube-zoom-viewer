@@ -116,7 +116,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     return bestParent;
   };
 
-  // Función para detectar si el mouse está sobre controles de transformación
+  // Función mejorada para detectar si el mouse está sobre controles de transformación
   const isOverTransformControl = (event: MouseEvent): boolean => {
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
@@ -126,12 +126,13 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
 
     raycaster.current.setFromCamera(mouse, camera);
     
-    // Buscar controles de transformación en la escena
+    // Buscar todos los elementos de controles de transformación
     const transformControls: THREE.Object3D[] = [];
     scene.traverse((child) => {
       if (child.userData.isTransformControl || 
           child.name.includes('TransformControl') ||
-          child.parent?.userData.isTransformControl) {
+          child.parent?.userData.isTransformControl ||
+          (child.parent && child.parent.name && child.parent.name.includes('TransformControl'))) {
         transformControls.push(child);
       }
     });
@@ -145,16 +146,14 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   };
 
   const handleMouseMove = (event: MouseEvent) => {
-    if (!isActive || isDragging) return;
-
-    // Si el mouse está sobre controles de transformación, no hacer hover
-    if (isOverTransformControl(event)) {
+    // No procesar eventos si no está activo, está arrastrando, o el mouse está sobre controles
+    if (!isActive || isDragging || isOverTransformControl(event)) {
       if (hovered && hovered !== selected) {
         restoreOriginalMaterial(hovered);
       }
       setHovered(null);
       onObjectHover?.(null);
-      gl.domElement.style.cursor = 'pointer';
+      gl.domElement.style.cursor = isOverTransformControl(event) ? 'pointer' : 'default';
       return;
     }
 
@@ -196,10 +195,8 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   };
 
   const handleClick = (event: MouseEvent) => {
-    if (!isActive || isDragging) return;
-
-    // Si el click es sobre controles de transformación, no procesar selección
-    if (isOverTransformControl(event)) {
+    // No procesar clicks si no está activo, está arrastrando, o el mouse está sobre controles
+    if (!isActive || isDragging || isOverTransformControl(event)) {
       return;
     }
 
@@ -229,8 +226,10 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     // Solo activar eventos si el selector está activo Y no se está arrastrando
     if (isActive && !isDragging) {
       const canvas = gl.domElement;
-      canvas.addEventListener('mousemove', handleMouseMove);
-      canvas.addEventListener('click', handleClick);
+      
+      // Usar listeners con baja prioridad para no interferir con TransformManipulator
+      canvas.addEventListener('mousemove', handleMouseMove, { passive: true });
+      canvas.addEventListener('click', handleClick, { passive: true });
 
       return () => {
         canvas.removeEventListener('mousemove', handleMouseMove);
