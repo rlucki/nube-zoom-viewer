@@ -27,6 +27,12 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
 
     controls.enabled = isActive && !!object;
     if (controls.enabled) {
+      // Ensure all child matrices update correctly during manipulation
+      if (object) {
+        object.traverse((child: THREE.Object3D) => {
+          child.matrixAutoUpdate = true;
+        });
+      }
       controls.attach(object);
       controls.setMode(mode);
       controls.setSize(2.0);
@@ -80,6 +86,12 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     // Eventos adicionales para mejor detección
     const handleMouseDown = () => {
       console.log('Transform controls mousedown detected');
+      // Temporarily disable pointer events on the canvas to avoid
+      // interfering with camera controls when the drag starts
+      gl.domElement.style.pointerEvents = 'none';
+      setTimeout(() => {
+        gl.domElement.style.pointerEvents = 'auto';
+      }, 0);
     };
 
     const handleMouseUp = () => {
