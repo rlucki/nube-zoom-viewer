@@ -51,26 +51,27 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
     };
 
-    controls.addEventListener('dragging-changed', (event: any) => {
+    // Evento principal de cambio de arrastre
+    const handleDraggingChanged = (event: any) => {
       if (event.value) {
         handleDragStart();
       } else {
         handleDragEnd();
       }
-    });
-    
+    };
+
+    controls.addEventListener('dragging-changed', handleDraggingChanged);
     controls.addEventListener('objectChange', handleObjectChange);
     
     return () => {
       if (controls) {
-        controls.removeEventListener('dragging-changed', handleDragStart);
-        controls.removeEventListener('dragging-changed', handleDragEnd);
+        controls.removeEventListener('dragging-changed', handleDraggingChanged);
         controls.removeEventListener('objectChange', handleObjectChange);
       }
     };
   }, [onDraggingChange, gl, object, isDragging]);
 
-  // Configurar y vincular objeto - simplificado
+  // Configurar y vincular objeto
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
@@ -120,6 +121,30 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       }
     };
   }, [object, isActive, mode, isDragging]);
+
+  // Manejar eventos de mouse para mejorar la detección de controles
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls || !isActive || !object) return;
+
+    const handleMouseDown = (event: MouseEvent) => {
+      // Detener la propagación del evento para evitar interferencia con ObjectSelector
+      event.stopImmediatePropagation();
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      event.stopImmediatePropagation();
+    };
+
+    const canvas = gl.domElement;
+    canvas.addEventListener('mousedown', handleMouseDown, true); // true para captura
+    canvas.addEventListener('mouseup', handleMouseUp, true);
+
+    return () => {
+      canvas.removeEventListener('mousedown', handleMouseDown, true);
+      canvas.removeEventListener('mouseup', handleMouseUp, true);
+    };
+  }, [isActive, object, gl]);
 
   // No renderizar si no está activo o no hay objeto
   if (!isActive || !object) {

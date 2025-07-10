@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
@@ -34,12 +33,11 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         !child.name.includes('grid') &&
         !child.name.includes('control') &&
         child.visible &&
-        child.parent !== scene // Evitar seleccionar objetos directos de la escena
+        child.parent !== scene
       ) {
         objects.push(child);
       }
     });
-    console.log('Selectable objects found:', objects.length);
     return objects;
   };
 
@@ -118,8 +116,47 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     return bestParent;
   };
 
+  // Función para detectar si el mouse está sobre controles de transformación
+  const isOverTransformControl = (event: MouseEvent): boolean => {
+    const rect = gl.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    raycaster.current.setFromCamera(mouse, camera);
+    
+    // Buscar controles de transformación en la escena
+    const transformControls: THREE.Object3D[] = [];
+    scene.traverse((child) => {
+      if (child.userData.isTransformControl || 
+          child.name.includes('TransformControl') ||
+          child.parent?.userData.isTransformControl) {
+        transformControls.push(child);
+      }
+    });
+
+    if (transformControls.length > 0) {
+      const intersects = raycaster.current.intersectObjects(transformControls, true);
+      return intersects.length > 0;
+    }
+
+    return false;
+  };
+
   const handleMouseMove = (event: MouseEvent) => {
     if (!isActive || isDragging) return;
+
+    // Si el mouse está sobre controles de transformación, no hacer hover
+    if (isOverTransformControl(event)) {
+      if (hovered && hovered !== selected) {
+        restoreOriginalMaterial(hovered);
+      }
+      setHovered(null);
+      onObjectHover?.(null);
+      gl.domElement.style.cursor = 'pointer';
+      return;
+    }
 
     const rect = gl.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
@@ -147,8 +184,6 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
         setHovered(targetObject);
         onObjectHover?.(targetObject);
         gl.domElement.style.cursor = 'pointer';
-        
-        console.log('Hovering object:', targetObject.name || targetObject.type, targetObject);
       }
     } else {
       if (hovered && hovered !== selected) {
@@ -160,8 +195,13 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     }
   };
 
-  const handleClick = () => {
+  const handleClick = (event: MouseEvent) => {
     if (!isActive || isDragging) return;
+
+    // Si el click es sobre controles de transformación, no procesar selección
+    if (isOverTransformControl(event)) {
+      return;
+    }
 
     if (hovered) {
       // Restaurar material del objeto previamente seleccionado
@@ -186,6 +226,7 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
   };
 
   useEffect(() => {
+    // Solo activar eventos si el selector está activo Y no se está arrastrando
     if (isActive && !isDragging) {
       const canvas = gl.domElement;
       canvas.addEventListener('mousemove', handleMouseMove);
