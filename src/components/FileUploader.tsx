@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import * as THREE from 'three';
 import { IFCLoader } from 'web-ifc-three';
+import JSZip from 'jszip';
 
 import type { Point, ViewerData, IFCGeometry } from './PointCloudViewer';
 
@@ -149,6 +150,22 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
       } else if (name.endsWith('.ifc')) {
         const buf = await file.arrayBuffer();
         onFileLoad(await parseIFC(buf), file.name);
+      } else if (name.endsWith('.ifczip') || name.endsWith('.zip')) {
+        const buf = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(buf);
+        
+        // Buscar el primer archivo .ifc dentro del ZIP
+        const ifcFile = Object.keys(zip.files).find(fileName => 
+          fileName.toLowerCase().endsWith('.ifc')
+        );
+        
+        if (!ifcFile) {
+          alert('No se encontró archivo IFC dentro del ZIP.');
+          return;
+        }
+        
+        const ifcBuffer = await zip.files[ifcFile].async('arraybuffer');
+        onFileLoad(await parseIFC(ifcBuffer), ifcFile);
       } else {
         alert('Formato no soportado.');
       }
@@ -166,7 +183,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".ply,.las,.laz,.ifc"
+        accept=".ply,.las,.laz,.ifc,.ifczip,.zip"
         onChange={handleFileSelect}
         className="hidden"
       />

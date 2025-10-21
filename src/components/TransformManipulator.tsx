@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { TransformControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import type { TransformControls as TransformControlsImpl } from 'three-stdlib';
 
 interface TransformManipulatorProps {
   object: THREE.Object3D | null;
@@ -17,7 +18,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
   mode,
   onDraggingChange,
 }) => {
-  const controlsRef = useRef<THREE.Object3D>(null);
+  const controlsRef = useRef<TransformControlsImpl>(null);
   const { camera, gl } = useThree();
 
   // Activar o desactivar controles según props
