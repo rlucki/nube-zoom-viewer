@@ -28,12 +28,18 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
 
     controls.enabled = isActive && !!object;
     if (controls.enabled) {
-      // Ensure all child matrices update correctly during manipulation
-      if (object) {
-        object.traverse((child: THREE.Object3D) => {
-          child.matrixAutoUpdate = true;
-        });
+      // Ensure we only attach objects that are part of the scene graph
+      if (!object || !object.parent) {
+        console.warn('TransformManipulator: object not in scene graph', object);
+        controls.enabled = false;
+        return;
       }
+
+      // Ensure all child matrices update correctly during manipulation
+      object.traverse((child: THREE.Object3D) => {
+        child.matrixAutoUpdate = true;
+      });
+
       controls.attach(object);
       controls.setMode(mode);
       controls.setSize(2.0);
