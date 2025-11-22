@@ -64,7 +64,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
     const handleDragEnd = () => {
       onDraggingChange?.(false);
       gl.domElement.style.cursor = 'grab';
-      
+
       if (object) {
         object.updateMatrixWorld(true);
         console.log('Transform completed for object:', object.name || object.type);
@@ -84,33 +84,14 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       else handleDragEnd();
     };
 
-    // Eventos adicionales para mejor detección
-    const handleMouseDown = () => {
-      console.log('Transform controls mousedown detected');
-      // Temporarily disable pointer events on the canvas to avoid
-      // interfering with camera controls when the drag starts
-      gl.domElement.style.pointerEvents = 'none';
-      setTimeout(() => {
-        gl.domElement.style.pointerEvents = 'auto';
-      }, 0);
-    };
-
-    const handleMouseUp = () => {
-      console.log('Transform controls mouseup detected');
-    };
-
-    // Agregar todos los listeners
+    // Listeners principales
     controls.addEventListener('dragging-changed', handleDraggingChanged);
     controls.addEventListener('objectChange', handleObjectChange);
-    controls.addEventListener('mouseDown', handleMouseDown);
-    controls.addEventListener('mouseUp', handleMouseUp);
-    
+
     return () => {
       if (controls) {
         controls.removeEventListener('dragging-changed', handleDraggingChanged);
         controls.removeEventListener('objectChange', handleObjectChange);
-        controls.removeEventListener('mouseDown', handleMouseDown);
-        controls.removeEventListener('mouseUp', handleMouseUp);
       }
     };
   }, [onDraggingChange, object, isActive, gl]);

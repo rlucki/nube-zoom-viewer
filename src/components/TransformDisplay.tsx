@@ -30,62 +30,68 @@ export const TransformDisplay: React.FC<TransformDisplayProps> = ({
     z: 0,
   });
 
-  // Guardar transformación original cuando se selecciona un objeto
+  // Inicializar transformaciones cuando se selecciona un objeto o cambia el modo
   useEffect(() => {
-    if (object && !originalTransform) {
-      setOriginalTransform({
-        position: object.position.clone(),
-        rotation: object.rotation.clone(),
-      });
-    }
-    
     if (!object) {
       setOriginalTransform(null);
       setCurrentValues({ x: 0, y: 0, z: 0 });
+      return;
     }
-  }, [object, originalTransform]);
 
-  // Actualizar valores actuales basados en la diferencia con el original
-  useEffect(() => {
-    if (object && originalTransform) {
-      if (mode === 'translate') {
-        const delta = object.position.clone().sub(originalTransform.position);
-        setCurrentValues({
-          x: Math.round(delta.x * 1000) / 1000,
-          y: Math.round(delta.y * 1000) / 1000,
-          z: Math.round(delta.z * 1000) / 1000,
-        });
-      } else if (mode === 'rotate') {
-        const deltaRotation = {
-          x: object.rotation.x - originalTransform.rotation.x,
-          y: object.rotation.y - originalTransform.rotation.y,
-          z: object.rotation.z - originalTransform.rotation.z,
-        };
-        setCurrentValues({
-          x: Math.round(THREE.MathUtils.radToDeg(deltaRotation.x) * 100) / 100,
-          y: Math.round(THREE.MathUtils.radToDeg(deltaRotation.y) * 100) / 100,
-          z: Math.round(THREE.MathUtils.radToDeg(deltaRotation.z) * 100) / 100,
-        });
-      }
+    // Guardar transformación original para poder resetear
+    setOriginalTransform({
+      position: object.position.clone(),
+      rotation: object.rotation.clone(),
+    });
+
+    if (mode === 'translate') {
+      // Usar coordenadas absolutas en espacio de mundo
+      const worldPos = new THREE.Vector3();
+      object.getWorldPosition(worldPos);
+      setCurrentValues({
+        x: Math.round(worldPos.x * 1000) / 1000,
+        y: Math.round(worldPos.y * 1000) / 1000,
+        z: Math.round(worldPos.z * 1000) / 1000,
+      });
+    } else if (mode === 'rotate') {
+      // Mostrar rotación absoluta en grados
+      setCurrentValues({
+        x: Math.round(THREE.MathUtils.radToDeg(object.rotation.x) * 100) / 100,
+        y: Math.round(THREE.MathUtils.radToDeg(object.rotation.y) * 100) / 100,
+        z: Math.round(THREE.MathUtils.radToDeg(object.rotation.z) * 100) / 100,
+      });
     }
-  }, [object?.position, object?.rotation, originalTransform, mode]);
+  }, [object, mode]);
 
   const handleValueChange = (axis: 'x' | 'y' | 'z', value: string) => {
-    if (!object || !originalTransform) return;
-    
-    const numValue = parseFloat(value) || 0;
-    
+    if (!object) return;
+
+    const numValue = parseFloat(value);
+    if (Number.isNaN(numValue)) return;
+
     if (mode === 'translate') {
-      const newPosition = originalTransform.position.clone();
-      newPosition[axis] += numValue;
-      object.position[axis] = newPosition[axis];
+      // Mover a coordenadas absolutas en espacio de mundo
+      const worldPos = new THREE.Vector3();
+      object.getWorldPosition(worldPos);
+      (worldPos as any)[axis] = numValue;
+
+      let localPos = worldPos.clone();
+      if (object.parent) {
+        localPos = object.parent.worldToLocal(localPos);
+      }
+      object.position.copy(localPos);
     } else if (mode === 'rotate') {
-      const newRotation = originalTransform.rotation.clone();
-      newRotation[axis] += THREE.MathUtils.degToRad(numValue);
-      object.rotation[axis] = newRotation[axis];
+      const rotationRad = THREE.MathUtils.degToRad(numValue);
+      object.rotation[axis] = rotationRad;
     }
-    
+
     object.updateMatrixWorld(true);
+
+    // Actualizar UI con el nuevo valor
+    setCurrentValues((prev) => ({
+      ...prev,
+      [axis]: numValue,
+    }));
   };
 
   const handleReset = () => {
@@ -94,7 +100,23 @@ export const TransformDisplay: React.FC<TransformDisplayProps> = ({
     object.position.copy(originalTransform.position);
     object.rotation.copy(originalTransform.rotation);
     object.updateMatrixWorld(true);
-    setCurrentValues({ x: 0, y: 0, z: 0 });
+
+    if (mode === 'translate') {
+      const worldPos = new THREE.Vector3();
+      object.getWorldPosition(worldPos);
+      setCurrentValues({
+        x: Math.round(worldPos.x * 1000) / 1000,
+        y: Math.round(worldPos.y * 1000) / 1000,
+        z: Math.round(worldPos.z * 1000) / 1000,
+      });
+    } else if (mode === 'rotate') {
+      setCurrentValues({
+        x: Math.round(THREE.MathUtils.radToDeg(object.rotation.x) * 100) / 100,
+        y: Math.round(THREE.MathUtils.radToDeg(object.rotation.y) * 100) / 100,
+        z: Math.round(THREE.MathUtils.radToDeg(object.rotation.z) * 100) / 100,
+      });
+    }
+
     onReset?.();
   };
 
