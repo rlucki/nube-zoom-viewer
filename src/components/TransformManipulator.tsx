@@ -19,37 +19,75 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
   onDraggingChange,
 }) => {
   const controlsRef = useRef<TransformControlsImpl>(null);
-  const { camera, gl } = useThree();
+  const { camera, gl, scene } = useThree();
 
   // Activar o desactivar controles según props
   useEffect(() => {
     const controls = controlsRef.current as any;
     if (!controls) return;
 
-    controls.enabled = isActive && !!object;
-    if (controls.enabled) {
-      // Ensure all child matrices update correctly during manipulation
-      if (object) {
-        object.traverse((child: THREE.Object3D) => {
-          child.matrixAutoUpdate = true;
-        });
+    // Si no hay herramienta activa o no hay objeto, desactivar y desanclar
+    if (!isActive || !object) {
+      controls.enabled = false;
+      if (controls.object) {
+        controls.detach();
       }
-      controls.attach(object);
-      controls.setMode(mode);
-      controls.setSize(2.0);
-      controls.setSpace('world');
-      if (mode === 'translate') {
-        controls.setTranslationSnap(0.05);
-        controls.setRotationSnap(null);
-      } else {
-        controls.setTranslationSnap(null);
-        controls.setRotationSnap(THREE.MathUtils.degToRad(5));
-      }
-    } else if (controls.object) {
-      controls.detach();
       gl.domElement.style.cursor = 'default';
+      return;
     }
-  }, [object, isActive, mode, gl]);
+
+    // Buscar el mejor nodo padre que CUELGUE DE LA ESCENA
+    let target: THREE.Object3D | null = object;
+    while (target && target.parent && target.parent.type !== 'Scene') {
+      target = target.parent;
+    }
+
+    // Validar que realmente forma parte del grafo de la escena
+    if (!target || !target.parent || target.parent !== scene) {
+      console.warn('TransformManipulator: el objeto seleccionado no forma parte del scene graph, no se puede adjuntar.');
+      controls.enabled = false;
+      if (controls.object) {
+        controls.detach();
+      }
+      return;
+    }
+
+    // Asegurar que todas las matrices se actualicen automáticamente
+    target.traverse((child: THREE.Object3D) => {
+      child.matrixAutoUpdate = true;
+    });
+
+    controls.enabled = true;
+
+    // Si el control ya tenía otro objeto adjunto, desanclar primero
+    if (controls.object && controls.object !== target) {
+      controls.detach();
+    }
+
+    // Adjuntar el grupo/nodo correcto
+    if (controls.object !== target) {
+      controls.attach(target);
+    }
+
+    controls.setMode(mode);
+    controls.setSize(2.0);
+    controls.setSpace('world');
+
+    if (mode === 'translate') {
+      controls.setTranslationSnap(0.05);
+      controls.setRotationSnap(null);
+    } else {
+      controls.setTranslationSnap(null);
+      controls.setRotationSnap(THREE.MathUtils.degToRad(5));
+    }
+
+    return () => {
+      if (controls) {
+        controls.detach();
+        gl.domElement.style.cursor = 'default';
+      }
+    };
+  }, [object, isActive, mode, gl, scene]);
 
   // Manejar eventos de arrastre - CORREGIDO
   useEffect(() => {
