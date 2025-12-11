@@ -19,7 +19,28 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
   onDraggingChange,
 }) => {
   const controlsRef = useRef<TransformControlsImpl>(null);
-  const { camera, gl, scene } = useThree();
+  const { camera, gl } = useThree();
+
+  // Encontrar el mejor objeto transformable (grupo padre o el objeto mismo)
+  const findTransformableTarget = (obj: THREE.Object3D): THREE.Object3D => {
+    // Buscar hacia arriba hasta encontrar un grupo con nombre o el primer grupo
+    let target = obj;
+    let bestTarget = obj;
+    
+    while (target.parent) {
+      // Si el padre es un Group con nombre específico (modelo IFC completo), usarlo
+      if (target.parent.type === 'Group' && target.parent.name) {
+        bestTarget = target.parent;
+      }
+      // Si llegamos a un grupo sin padre significativo, parar
+      if (!target.parent.parent || target.parent.type === 'Scene') {
+        break;
+      }
+      target = target.parent;
+    }
+    
+    return bestTarget;
+  };
 
   // Activar o desactivar controles según props
   useEffect(() => {
@@ -36,21 +57,10 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       return;
     }
 
-    // Buscar el mejor nodo padre que CUELGUE DE LA ESCENA
-    let target: THREE.Object3D | null = object;
-    while (target && target.parent && target.parent.type !== 'Scene') {
-      target = target.parent;
-    }
-
-    // Validar que realmente forma parte del grafo de la escena
-    if (!target || !target.parent || target.parent !== scene) {
-      console.warn('TransformManipulator: el objeto seleccionado no forma parte del scene graph, no se puede adjuntar.');
-      controls.enabled = false;
-      if (controls.object) {
-        controls.detach();
-      }
-      return;
-    }
+    // Encontrar el mejor objeto para transformar
+    const target = findTransformableTarget(object);
+    
+    console.log('TransformManipulator: adjuntando a', target.name || target.type, target);
 
     // Asegurar que todas las matrices se actualicen automáticamente
     target.traverse((child: THREE.Object3D) => {
@@ -64,7 +74,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       controls.detach();
     }
 
-    // Adjuntar el grupo/nodo correcto
+    // Adjuntar el objeto
     if (controls.object !== target) {
       controls.attach(target);
     }
@@ -87,7 +97,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
         gl.domElement.style.cursor = 'default';
       }
     };
-  }, [object, isActive, mode, gl, scene]);
+  }, [object, isActive, mode, gl]);
 
   // Manejar eventos de arrastre - CORREGIDO
   useEffect(() => {
