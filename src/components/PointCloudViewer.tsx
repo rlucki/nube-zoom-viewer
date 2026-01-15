@@ -533,10 +533,10 @@ export const PointCloudViewer: React.FC = () => {
           {/* Controles de cámara - con mayor sensibilidad */}
           <OrbitControls
             ref={controlsRef}
-            enablePan={cameraControlsEnabled}
-            enableZoom={cameraControlsEnabled}
-            enableRotate={cameraControlsEnabled}
-            enabled={cameraControlsEnabled}
+            enablePan={orbitEnabled}
+            enableZoom={orbitEnabled}
+            enableRotate={orbitEnabled}
+            enabled={orbitEnabled}
             zoomSpeed={1.5} // Aumentar sensibilidad
             panSpeed={1.5}
             rotateSpeed={2.0} // Mayor sensibilidad de rotación
@@ -556,6 +556,8 @@ export const PointCloudViewer: React.FC = () => {
   /* -------------------------------------------------------------------------- */
   /*  Render                                                                    */
   /* -------------------------------------------------------------------------- */
+  const orbitEnabled = cameraControlsEnabled && !(transformActive && selectedObject !== null);
+
   return (
     <div className="w-full h-screen bg-gray-900 relative">
       {/* ---------- Barra superior de herramientas --------------------------- */}
