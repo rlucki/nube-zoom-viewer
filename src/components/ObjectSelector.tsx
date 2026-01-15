@@ -108,14 +108,18 @@ export const ObjectSelector: React.FC<ObjectSelectorProps> = ({
     // Buscar el mejor padre para seleccionar (Group o el objeto más alto significativo)
     let current = obj;
     let bestParent = obj;
-    
+
     while (current.parent && current.parent.type !== 'Scene') {
       current = current.parent;
+
+      // Evitar seleccionar nodos "UI" invisibles (pivotes, gizmos, etc.)
+      if (current.userData?.isUI || current.userData?.isTransformPivot) continue;
+
       if (current instanceof THREE.Group || current.userData.isModel) {
         bestParent = current;
       }
     }
-    
+
     return bestParent;
   };
 

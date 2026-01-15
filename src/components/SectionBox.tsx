@@ -42,6 +42,22 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   const boxRef = useRef<THREE.Group>(null);
   const { camera, gl, scene } = useThree();
 
+  const isUiTree = useCallback((obj: THREE.Object3D) => {
+    let cur: THREE.Object3D | null = obj;
+    while (cur) {
+      if (
+        cur.userData?.isSectionBox ||
+        cur.userData?.isUI ||
+        cur.userData?.isTransformControl ||
+        cur.userData?.isTransformPivot
+      ) {
+        return true;
+      }
+      cur = cur.parent;
+    }
+    return false;
+  }, []);
+
   // Calcular bounds iniciales SOLO si no existen y SectionBox activo
   useEffect(() => {
     if (isActive && !bounds) {
@@ -97,7 +113,9 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
     ];
 
     scene.traverse((child) => {
-      if (child instanceof THREE.Mesh && !child.userData.isSectionBox) {
+      if (isUiTree(child)) return;
+
+      if (child instanceof THREE.Mesh) {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         materials.forEach((material) => {
           if (material) {
@@ -106,7 +124,8 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
           }
         });
       }
-      if (child instanceof THREE.Points && !child.userData.isSectionBox) {
+
+      if (child instanceof THREE.Points) {
         // Solo aplica si el material admite clippingPlanes (caso de PointsMaterial estándar)
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         materials.forEach((material: any) => {
@@ -122,7 +141,9 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
   // Remover clipping
   const removeClipping = useCallback(() => {
     scene.traverse((child) => {
-      if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && !child.userData.isSectionBox) {
+      if (isUiTree(child)) return;
+
+      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         materials.forEach((material) => {
           if (material) {
@@ -132,7 +153,7 @@ export const SectionBox: React.FC<SectionBoxProps> = ({
         });
       }
     });
-  }, [scene]);
+  }, [scene, isUiTree]);
 
   // Aplicar/remover clipping
   useEffect(() => {
