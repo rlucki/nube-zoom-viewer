@@ -19,52 +19,77 @@ export const TransformDisplay: React.FC<TransformDisplayProps> = ({
   isVisible,
   onReset,
 }) => {
+  const getTransformHandle = (obj: THREE.Object3D | null): THREE.Object3D | null => {
+    if (!obj) return null;
+    if ((obj.userData as any)?.isTransformPivot) return obj;
+    const pivot = (obj.userData as any)?.__transformPivot as THREE.Object3D | undefined;
+    return pivot ?? obj;
+  };
+
   const [originalTransform, setOriginalTransform] = useState<{
     position: THREE.Vector3;
     rotation: THREE.Euler;
+    uuid: string;
   } | null>(null);
-  
+
   const [currentValues, setCurrentValues] = useState({
     x: 0,
     y: 0,
     z: 0,
   });
 
-  // Inicializar transformaciones cuando se selecciona un objeto o cambia el modo
-  useEffect(() => {
-    if (!object) {
-      setOriginalTransform(null);
-      setCurrentValues({ x: 0, y: 0, z: 0 });
-      return;
-    }
-
-    // Guardar transformación original para poder resetear
-    setOriginalTransform({
-      position: object.position.clone(),
-      rotation: object.rotation.clone(),
-    });
-
+  const syncFromObject = (obj: THREE.Object3D) => {
     if (mode === 'translate') {
-      // Usar coordenadas absolutas en espacio de mundo
       const worldPos = new THREE.Vector3();
-      object.getWorldPosition(worldPos);
+      obj.getWorldPosition(worldPos);
       setCurrentValues({
         x: Math.round(worldPos.x * 1000) / 1000,
         y: Math.round(worldPos.y * 1000) / 1000,
         z: Math.round(worldPos.z * 1000) / 1000,
       });
-    } else if (mode === 'rotate') {
-      // Mostrar rotación absoluta en grados
+    } else {
       setCurrentValues({
-        x: Math.round(THREE.MathUtils.radToDeg(object.rotation.x) * 100) / 100,
-        y: Math.round(THREE.MathUtils.radToDeg(object.rotation.y) * 100) / 100,
-        z: Math.round(THREE.MathUtils.radToDeg(object.rotation.z) * 100) / 100,
+        x: Math.round(THREE.MathUtils.radToDeg(obj.rotation.x) * 100) / 100,
+        y: Math.round(THREE.MathUtils.radToDeg(obj.rotation.y) * 100) / 100,
+        z: Math.round(THREE.MathUtils.radToDeg(obj.rotation.z) * 100) / 100,
       });
     }
+  };
+
+  // Inicializar transformaciones cuando se selecciona un objeto o cambia el modo
+  useEffect(() => {
+    const handle = getTransformHandle(object);
+    if (!handle) {
+      setOriginalTransform(null);
+      setCurrentValues({ x: 0, y: 0, z: 0 });
+      return;
+    }
+
+    setOriginalTransform({
+      position: handle.position.clone(),
+      rotation: handle.rotation.clone(),
+      uuid: handle.uuid,
+    });
+
+    syncFromObject(handle);
   }, [object, mode]);
 
+  // Mantener UI sincronizada mientras se arrastra el gizmo (y también si el pivote se crea después)
+  useEffect(() => {
+    if (!isVisible) return;
+    const handle = getTransformHandle(object);
+    if (!handle) return;
+
+    const id = window.setInterval(() => {
+      syncFromObject(handle);
+    }, 200);
+
+    return () => window.clearInterval(id);
+  }, [isVisible, object, mode]);
+
   const handleValueChange = (axis: 'x' | 'y' | 'z', value: string) => {
-    if (!object) return;
+    const handle = getTransformHandle(object);
+    if (!handle) return;
 
     const numValue = parseFloat(value);
     if (Number.isNaN(numValue)) return;
@@ -72,20 +97,20 @@ export const TransformDisplay: React.FC<TransformDisplayProps> = ({
     if (mode === 'translate') {
       // Mover a coordenadas absolutas en espacio de mundo
       const worldPos = new THREE.Vector3();
-      object.getWorldPosition(worldPos);
+      handle.getWorldPosition(worldPos);
       (worldPos as any)[axis] = numValue;
 
       let localPos = worldPos.clone();
-      if (object.parent) {
-        localPos = object.parent.worldToLocal(localPos);
+      if (handle.parent) {
+        localPos = handle.parent.worldToLocal(localPos);
       }
-      object.position.copy(localPos);
-    } else if (mode === 'rotate') {
+      handle.position.copy(localPos);
+    } else {
       const rotationRad = THREE.MathUtils.degToRad(numValue);
-      object.rotation[axis] = rotationRad;
+      handle.rotation[axis] = rotationRad;
     }
 
-    object.updateMatrixWorld(true);
+    handle.updateMatrixWorld(true);
 
     // Actualizar UI con el nuevo valor
     setCurrentValues((prev) => ({
@@ -95,28 +120,15 @@ export const TransformDisplay: React.FC<TransformDisplayProps> = ({
   };
 
   const handleReset = () => {
-    if (!object || !originalTransform) return;
-    
-    object.position.copy(originalTransform.position);
-    object.rotation.copy(originalTransform.rotation);
-    object.updateMatrixWorld(true);
+    const handle = getTransformHandle(object);
+    if (!handle || !originalTransform) return;
+    if (handle.uuid !== originalTransform.uuid) return;
 
-    if (mode === 'translate') {
-      const worldPos = new THREE.Vector3();
-      object.getWorldPosition(worldPos);
-      setCurrentValues({
-        x: Math.round(worldPos.x * 1000) / 1000,
-        y: Math.round(worldPos.y * 1000) / 1000,
-        z: Math.round(worldPos.z * 1000) / 1000,
-      });
-    } else if (mode === 'rotate') {
-      setCurrentValues({
-        x: Math.round(THREE.MathUtils.radToDeg(object.rotation.x) * 100) / 100,
-        y: Math.round(THREE.MathUtils.radToDeg(object.rotation.y) * 100) / 100,
-        z: Math.round(THREE.MathUtils.radToDeg(object.rotation.z) * 100) / 100,
-      });
-    }
+    handle.position.copy(originalTransform.position);
+    handle.rotation.copy(originalTransform.rotation);
+    handle.updateMatrixWorld(true);
 
+    syncFromObject(handle);
     onReset?.();
   };
 
