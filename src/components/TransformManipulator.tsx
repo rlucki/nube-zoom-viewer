@@ -1,5 +1,4 @@
-
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { TransformControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -13,17 +12,28 @@ interface TransformManipulatorProps {
 }
 
 /**
- * Sube por el scene graph hasta encontrar el grupo raíz del modelo,
- * es decir el hijo directo de la Scene de R3F.
+ * Walk up the scene graph to find the top-level model group.
+ * We stop at the first Group whose parent is also a Group that is
+ * a direct child of the Scene (the wrapper <group> in PointCloudViewer).
+ * This way we grab the per-model group, not the shared wrapper.
  */
-const findModelRoot = (obj: THREE.Object3D, scene: THREE.Scene): THREE.Object3D => {
+const findModelGroup = (obj: THREE.Object3D): THREE.Object3D => {
   let current = obj;
-  while (current.parent && current.parent !== scene) {
+  while (current.parent) {
+    // If grandparent is the Scene, current.parent is the wrapper group
+    // and current is the per-model group — that's our target.
+    if (current.parent.parent && current.parent.parent.type === 'Scene') {
+      return current;
+    }
+    // If parent IS the Scene, current itself is a direct child (unlikely for models
+    // since they're in a wrapper, but handle it).
+    if (current.parent.type === 'Scene') {
+      return current;
+    }
     current = current.parent;
   }
-  // Si current.parent es la scene, current es hijo directo → raíz del modelo
-  // Si current.parent es null, devolvemos el objeto original
-  return current.parent === scene ? current : obj;
+  // Fallback: return the original object
+  return obj;
 };
 
 export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
@@ -33,92 +43,73 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
   onDraggingChange,
 }) => {
   const controlsRef = useRef<TransformControlsImpl>(null);
-  const { gl, scene } = useThree();
+  const { gl } = useThree();
 
-  const target = useMemo(() => {
+  // Find the correct target to move
+  const target = React.useMemo(() => {
     if (!object) return null;
-    return findModelRoot(object, scene);
-  }, [object, scene]);
-
-  // Adjuntar / desadjuntar TransformControls
-  useEffect(() => {
-    const controls = controlsRef.current as any;
-    if (!controls) return;
-
-    if (!isActive || !target) {
-      controls.detach();
-      gl.domElement.style.cursor = 'default';
-      return;
+    const group = findModelGroup(object);
+    // Verify the object is actually in a scene graph
+    let root: THREE.Object3D = group;
+    while (root.parent) root = root.parent;
+    if (root.type !== 'Scene') {
+      console.warn('TransformManipulator: target not in scene graph', group.type, group.name);
+      return null;
     }
+    console.log('TransformManipulator: target =', group.name || group.type, 'uuid:', group.uuid);
+    return group;
+  }, [object]);
 
-    console.log('TransformManipulator: attach', target.name || target.type, 'parent:', target.parent?.type);
-
-    target.matrixAutoUpdate = true;
-    controls.attach(target);
-    controls.setMode(mode);
-    controls.setSpace('world');
-
-    // Tamaño del gizmo proporcional al modelo
-    const box = new THREE.Box3().setFromObject(target);
-    const diag = box.isEmpty() ? 10 : box.getSize(new THREE.Vector3()).length();
-    controls.setSize(THREE.MathUtils.clamp(diag * 0.15, 1.5, 25.0));
-
-    if (mode === 'translate') {
-      controls.setTranslationSnap(null);
-      controls.setRotationSnap(null);
-    } else {
-      controls.setTranslationSnap(null);
-      controls.setRotationSnap(THREE.MathUtils.degToRad(5));
-    }
-
-    gl.domElement.style.cursor = 'grab';
-
-    return () => {
-      controls.detach();
-      gl.domElement.style.cursor = 'default';
-    };
-  }, [target, isActive, mode, gl]);
-
-  // Eventos de arrastre
+  // Handle dragging events
   useEffect(() => {
     const controls = controlsRef.current;
-    if (!controls || !isActive) return;
+    if (!controls || !isActive || !target) return;
 
     const onDraggingChanged = (event: any) => {
       const dragging = event.value as boolean;
       onDraggingChange?.(dragging);
       gl.domElement.style.cursor = dragging ? 'grabbing' : 'grab';
-      if (!dragging) {
-        const obj = (controls as any).object as THREE.Object3D | null;
-        obj?.updateMatrixWorld(true);
-      }
     };
 
     controls.addEventListener('dragging-changed', onDraggingChanged);
     return () => {
       controls.removeEventListener('dragging-changed', onDraggingChanged);
     };
-  }, [onDraggingChange, isActive, gl]);
+  }, [isActive, target, onDraggingChange, gl]);
 
-  // Cleanup al desactivar
+  // Set cursor
+  useEffect(() => {
+    if (isActive && target) {
+      gl.domElement.style.cursor = 'grab';
+    }
+    return () => {
+      gl.domElement.style.cursor = 'default';
+    };
+  }, [isActive, target, gl]);
+
+  // Cleanup on deactivate
   useEffect(() => {
     if (!isActive) {
       onDraggingChange?.(false);
-      gl.domElement.style.cursor = 'default';
     }
-  }, [isActive, onDraggingChange, gl]);
+  }, [isActive, onDraggingChange]);
 
   if (!isActive || !target) return null;
+
+  // Calculate gizmo size from model bounds
+  const box = new THREE.Box3().setFromObject(target);
+  const size = box.isEmpty() ? 2 : THREE.MathUtils.clamp(box.getSize(new THREE.Vector3()).length() * 0.15, 1.5, 25);
 
   return (
     <TransformControls
       ref={controlsRef}
+      object={target}
       mode={mode}
-      size={2.0}
+      size={size}
+      space="world"
       showX
       showY
       showZ
-      space="world"
     />
   );
 };
