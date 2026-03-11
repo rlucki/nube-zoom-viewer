@@ -13,16 +13,17 @@ interface TransformManipulatorProps {
 }
 
 /**
- * Sube por el scene graph hasta encontrar el grupo raíz del modelo
- * (el primer Group hijo directo de la Scene o del root de R3F).
+ * Sube por el scene graph hasta encontrar el grupo raíz del modelo,
+ * es decir el hijo directo de la Scene de R3F.
  */
-const findModelRoot = (obj: THREE.Object3D): THREE.Object3D => {
+const findModelRoot = (obj: THREE.Object3D, scene: THREE.Scene): THREE.Object3D => {
   let current = obj;
-  while (current.parent && current.parent.type !== 'Scene') {
-    // Si el padre directo es la Scene, current ya es la raíz del modelo
+  while (current.parent && current.parent !== scene) {
     current = current.parent;
   }
-  return current;
+  // Si current.parent es la scene, current es hijo directo → raíz del modelo
+  // Si current.parent es null, devolvemos el objeto original
+  return current.parent === scene ? current : obj;
 };
 
 export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
@@ -32,13 +33,12 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
   onDraggingChange,
 }) => {
   const controlsRef = useRef<TransformControlsImpl>(null);
-  const { gl } = useThree();
+  const { gl, scene } = useThree();
 
-  // Calcular el target una sola vez cuando cambia el objeto
   const target = useMemo(() => {
     if (!object) return null;
-    return findModelRoot(object);
-  }, [object]);
+    return findModelRoot(object, scene);
+  }, [object, scene]);
 
   // Adjuntar / desadjuntar TransformControls
   useEffect(() => {
@@ -51,19 +51,7 @@ export const TransformManipulator: React.FC<TransformManipulatorProps> = ({
       return;
     }
 
-    // Verificar que el target pertenece al scene graph
-    let inScene = false;
-    let node: THREE.Object3D | null = target;
-    while (node) {
-      if (node.type === 'Scene') { inScene = true; break; }
-      node = node.parent;
-    }
-    if (!inScene) {
-      console.warn('TransformManipulator: target no está en el scene graph, omitiendo attach');
-      return;
-    }
-
-    console.log('TransformManipulator: attach', target.name || target.type, target.uuid.slice(0, 8));
+    console.log('TransformManipulator: attach', target.name || target.type, 'parent:', target.parent?.type);
 
     target.matrixAutoUpdate = true;
     controls.attach(target);
