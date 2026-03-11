@@ -21,9 +21,14 @@ export const TransformDisplay: React.FC<TransformDisplayProps> = ({
 }) => {
   const getTransformHandle = (obj: THREE.Object3D | null): THREE.Object3D | null => {
     if (!obj) return null;
-    if ((obj.userData as any)?.isTransformPivot) return obj;
-    const pivot = (obj.userData as any)?.__transformPivot as THREE.Object3D | undefined;
-    return pivot ?? obj;
+    // Walk up to find the per-model group (same logic as TransformManipulator)
+    let current = obj;
+    while (current.parent) {
+      if (current.parent.parent && current.parent.parent.type === 'Scene') return current;
+      if (current.parent.type === 'Scene') return current;
+      current = current.parent;
+    }
+    return obj;
   };
 
   const [originalTransform, setOriginalTransform] = useState<{
